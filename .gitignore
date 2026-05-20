@@ -1,0 +1,44 @@
+# Claude Code local state
+.claude/settings.local.json
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.python-store/
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Node (anticipating scripts/sandcastle/)
+node_modules/
+*.log
+npm-debug.log*
+
+# Sandcastle runtime (per agentic-ai precedent — keep .env.example, ignore the rest)
+.sandcastle/.env
+.sandcastle/logs/
+.sandcastle/worktrees/
+
+# Secrets
+.env
+.env.*
+!.env.example
+
+# Generated corpora (Evidence Factory output)
+out/
+corpus/
+runs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Editors
+.vscode/
+.idea/
+*.swp
