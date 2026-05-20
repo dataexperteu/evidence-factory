@@ -11,9 +11,7 @@ def test_default_registry_has_four_personas_with_email_devices():
     assert len(reg.personas()) == 4
     for persona in reg.personas():
         devs = reg.devices_for(persona.id)
-        assert any(d.profile == "email" for d in devs), (
-            f"persona {persona.id} has no email device"
-        )
+        assert any(d.profile == "email" for d in devs), f"persona {persona.id} has no email device"
 
 
 def test_default_registry_xlsx_devices_for_workstation_personas():

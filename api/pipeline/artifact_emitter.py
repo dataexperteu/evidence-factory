@@ -29,7 +29,9 @@ def _pick_recipient(registry: PersonaRegistry, sender_id: str) -> tuple[str, str
     raise ValueError("registry must have at least two personas to emit email")
 
 
-def _ledger_rows(persona: Persona, event_summary: str, gateway_body: str) -> tuple[dict[str, Any], ...]:
+def _ledger_rows(
+    persona: Persona, event_summary: str, gateway_body: str
+) -> tuple[dict[str, Any], ...]:
     """Build a small set of ledger rows for an xlsx artifact."""
     from datetime import datetime
 
@@ -99,8 +101,7 @@ def emit_artifacts(
             rows = _ledger_rows(persona, event.summary, gateway_body)
             # Replace placeholder dates with the event timestamp
             rows = tuple(
-                {**r, "date": event.timestamp.astimezone(UTC).replace(tzinfo=None)}
-                for r in rows
+                {**r, "date": event.timestamp.astimezone(UTC).replace(tzinfo=None)} for r in rows
             )
             brief_xlsx = XlsxBrief(
                 creator_name=persona.display_name,

@@ -168,7 +168,9 @@ def test_requires_timezone_aware_created():
 def test_modified_must_be_ge_created():
     base = datetime(2024, 6, 3, tzinfo=UTC)
     with pytest.raises(ValueError, match="modified"):
-        write_xlsx_ledger(_brief(created=base, modified=base - timedelta(seconds=1)), disclaimer="d")
+        write_xlsx_ledger(
+            _brief(created=base, modified=base - timedelta(seconds=1)), disclaimer="d"
+        )
 
 
 def test_modified_equal_to_created_is_valid():
