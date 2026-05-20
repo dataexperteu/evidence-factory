@@ -117,23 +117,26 @@ test.describe("Full pipeline run — SSE progress and download", () => {
     await page.goto("/");
     await fillAndAttest(page);
 
-    // Register observers for the transient disabled state before clicking so
-    // that even a very fast fixture-mode pipeline doesn't race past them.
-    const textareaDisabledPromise = page.waitForFunction(
-      () => (document.getElementById("paste") as HTMLTextAreaElement | null)?.disabled ?? false,
-      { timeout: 5_000 },
-    );
-    const checkboxDisabledPromise = page.waitForFunction(
-      () => (document.getElementById("attest") as HTMLInputElement | null)?.disabled ?? false,
-      { timeout: 5_000 },
-    );
+    // Gate the SSE stream so the submitting state (inputs disabled) persists
+    // long enough for the assertions to observe it.  The fixture pipeline is
+    // otherwise too fast — run_id is set and streamDone flips back to true
+    // before a polling assertion can catch the transient disabled window.
+    let releaseSse!: () => void;
+    const sseGate = new Promise<void>(r => { releaseSse = r; });
+    await page.route(/\/api\/runs\/[a-f0-9]+\/events/, async (route) => {
+      await sseGate;
+      await route.continue();
+    });
 
     await page.getByTestId("generate").click();
 
-    await textareaDisabledPromise;
-    await checkboxDisabledPromise;
+    // POST /api/runs has resolved → run_id set → submitting=true → inputs disabled.
+    // SSE is held open, so streamDone stays false and submitting stays true.
+    await expect(page.locator("#paste")).toBeDisabled({ timeout: 5_000 });
+    await expect(page.locator("#attest")).toBeDisabled({ timeout: 5_000 });
 
-    // Wait for completion so subsequent tests don't leave an orphaned SSE.
+    // Release the gate so the pipeline can complete.
+    releaseSse();
     await expect(page.getByTestId("stage-done-complete")).toBeVisible({ timeout: 30_000 });
   });
 
@@ -184,19 +187,32 @@ test.describe("Generate again — state resets cleanly", () => {
     await page.goto("/");
     await fillAndAttest(page);
 
-    // First run.
+    // First run — unthrottled.
     await page.getByTestId("generate").click();
     await expect(page.getByTestId("stage-done-complete")).toBeVisible({ timeout: 30_000 });
 
     const firstHref = await page.getByTestId("download").getAttribute("href");
 
+    // Gate the second run's SSE so the download-link-gone window is wide
+    // enough to observe.  onGenerate() clears events[] synchronously
+    // (succeeded=false → download hidden) before the POST resolves, but the
+    // fixture pipeline is so fast that without a gate the download link
+    // comes back before Playwright's polling catches the absence.
+    let releaseSse!: () => void;
+    const sseGate = new Promise<void>(r => { releaseSse = r; });
+    await page.route(/\/api\/runs\/[a-f0-9]+\/events/, async (route) => {
+      await sseGate;
+      await route.continue();
+    });
+
     // Second run — click Generate again (inputs still filled, attestation still checked).
     await page.getByTestId("generate").click();
 
-    // The old download link must disappear while the new run is in flight.
+    // onGenerate() synchronously clears events[] → succeeded=false → download link hidden.
     await expect(page.getByTestId("download")).not.toBeVisible({ timeout: 5_000 });
 
-    // Wait for the new run to complete.
+    // Release the gate so the second pipeline can complete.
+    releaseSse();
     await expect(page.getByTestId("stage-done-complete")).toBeVisible({ timeout: 30_000 });
 
     const secondHref = await page.getByTestId("download").getAttribute("href");
