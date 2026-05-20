@@ -60,7 +60,9 @@ class Event:
     device_id: str
     summary: str
     proposition_ids: tuple[str, ...]
-    location: tuple[float, float] | None = None  # (lat, lon) decimal degrees; used by GPS-capable profiles
+    location: tuple[float, float] | None = (
+        None  # (lat, lon) decimal degrees; used by GPS-capable profiles
+    )
 
 
 @dataclass(frozen=True)

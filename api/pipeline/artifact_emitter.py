@@ -36,9 +36,7 @@ def _emit_email(
     persona = registry.get_persona(event.actor_id)
     device = registry.get_device(event.device_id)
     if not registry.is_permitted(persona.id, device.id, "email"):
-        raise ValueError(
-            f"persona {persona.id} not permitted to emit email on device {device.id}"
-        )
+        raise ValueError(f"persona {persona.id} not permitted to emit email on device {device.id}")
     recipient = _pick_recipient(registry, persona.id)
     body = gateway.complete(
         "artifact_content",
