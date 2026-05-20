@@ -19,6 +19,12 @@ node_modules/
 *.log
 npm-debug.log*
 
+# Vite build output
+ui-app/dist/
+ui-app/test-results/
+ui-app/playwright-report/
+ui-app/tsconfig.tsbuildinfo
+
 # Sandcastle runtime (per agentic-ai precedent — keep .env.example, ignore the rest)
 .sandcastle/.env
 .sandcastle/logs/
