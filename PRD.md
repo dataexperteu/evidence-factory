@@ -1,6 +1,6 @@
 # PRD — Evidence Factory
 
-Status: Draft. **Not yet published to an issue tracker** — no tracker / triage-label vocabulary is configured for this repo (`/setup-matt-pocock-skills` has not been run). Apply `ready-for-agent` triage when the tracker is wired in.
+Status: Published as [#1](https://github.com/dataexperteu/evidence-factory/issues/1), labelled `ready-for-agent`.
 
 ## Problem Statement
 
@@ -192,4 +192,4 @@ Sandcastle setup is copied from `agentic-ai` and is **AUTHORED, NOT RUN** until 
 
 ### Publishing & triage
 
-This PRD has not been published to an issue tracker — no tracker is configured for this repo. When `/setup-matt-pocock-skills` is run and a tracker + label vocabulary is in place, this PRD should be published and labelled `ready-for-agent`.
+Published as [#1](https://github.com/dataexperteu/evidence-factory/issues/1) on `dataexperteu/evidence-factory`, labelled `ready-for-agent`. Slices are tracked as child issues with `Parent: #1` references.
