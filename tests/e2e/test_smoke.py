@@ -150,9 +150,7 @@ def test_smoke_corpus_contains_sms_artifacts():
     sms_persona_ids = {
         p.id for p in registry.personas() if registry.devices_for(p.id)[0].profile == "sms"
     }
-    sms_persona_slugs = {
-        _slug(registry.get_persona(pid).display_name) for pid in sms_persona_ids
-    }
+    sms_persona_slugs = {_slug(registry.get_persona(pid).display_name) for pid in sms_persona_ids}
 
     for path in sms_artifact_paths:
         _, custodian, _device, _filename = path.split("/")
@@ -167,8 +165,7 @@ def test_smoke_sms_csv_round_trips_via_dictreader():
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
         names = zf.namelist()
         sms_artifact_paths = [
-            n for n in names
-            if n.startswith("corpus/") and n.endswith(".csv") and n.count("/") == 3
+            n for n in names if n.startswith("corpus/") and n.endswith(".csv") and n.count("/") == 3
         ]
         assert sms_artifact_paths
 

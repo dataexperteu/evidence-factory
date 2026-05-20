@@ -35,9 +35,7 @@ def _emit_email(
     persona = registry.get_persona(event.actor_id)
     device = registry.get_device(event.device_id)
     if not registry.is_permitted(persona.id, device.id, "email"):
-        raise ValueError(
-            f"persona {persona.id} not permitted to emit email on device {device.id}"
-        )
+        raise ValueError(f"persona {persona.id} not permitted to emit email on device {device.id}")
     recipient_name, recipient_addr = _pick_other(registry, persona.id)
     body = gateway.complete(
         "artifact_content",
@@ -77,9 +75,7 @@ def _emit_sms(
     persona = registry.get_persona(event.actor_id)
     device = registry.get_device(event.device_id)
     if not registry.is_permitted(persona.id, device.id, "sms"):
-        raise ValueError(
-            f"persona {persona.id} not permitted to emit sms on device {device.id}"
-        )
+        raise ValueError(f"persona {persona.id} not permitted to emit sms on device {device.id}")
     recipient_name, _ = _pick_other(registry, persona.id)
     body = gateway.complete(
         "artifact_content",

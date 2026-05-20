@@ -17,9 +17,7 @@ def test_default_registry_has_email_and_sms_personas():
 
 def test_sms_personas_have_smartphone_devices():
     reg = default_registry()
-    sms_personas = [
-        p for p in reg.personas() if reg.devices_for(p.id)[0].profile == "sms"
-    ]
+    sms_personas = [p for p in reg.personas() if reg.devices_for(p.id)[0].profile == "sms"]
     assert len(sms_personas) == 2
     for persona in sms_personas:
         devs = reg.devices_for(persona.id)

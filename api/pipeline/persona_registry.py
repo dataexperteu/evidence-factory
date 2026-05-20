@@ -92,9 +92,7 @@ def default_registry() -> PersonaRegistry:
         Device(
             id="d_lestrade_mail", owner_id="p_lestrade", label="lestrade-desktop", profile="email"
         ),
-        Device(
-            id="d_irene_sms", owner_id="p_irene", label="irene-smartphone", profile="sms"
-        ),
+        Device(id="d_irene_sms", owner_id="p_irene", label="irene-smartphone", profile="sms"),
         Device(
             id="d_moriarty_sms", owner_id="p_moriarty", label="moriarty-smartphone", profile="sms"
         ),

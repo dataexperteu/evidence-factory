@@ -41,8 +41,8 @@ def _slug(s: str, max_len: int = 30) -> str:
 class SmsMessage:
     """A single message within a conversation thread."""
 
-    sender: str      # display name / persona label
-    recipient: str   # display name / persona label
+    sender: str  # display name / persona label
+    recipient: str  # display name / persona label
     timestamp_iso: str  # ISO 8601 tz-aware sent timestamp; must be monotone within thread
     body: str
 
@@ -59,7 +59,7 @@ class SmsBrief:
     participants: tuple[str, ...]
     messages: tuple[SmsMessage, ...]
     window_start: datetime  # bounding event window — tz-aware
-    window_end: datetime    # bounding event window — tz-aware
+    window_end: datetime  # bounding event window — tz-aware
 
 
 @dataclass(frozen=True)
