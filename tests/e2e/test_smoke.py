@@ -1,11 +1,12 @@
 """End-to-end smoke test: paste → corpus zip.
 
-Runs the full slice-1 pipeline on a small fixed public-domain source
-(Speckled Band excerpt, Conan Doyle, 1892, public domain) and asserts:
+Runs the full pipeline on a small fixed public-domain source (Speckled Band
+excerpt, Conan Doyle, 1892, public domain) and asserts:
 - the zip has /corpus and /SOLUTION
 - every manifest SHA-256 matches the file contents
 - closure passes
 - every artifact is owner-bound to a persona/device in the registry
+- corpus contains both .eml and .pdf artifacts (slice-3 acceptance criterion)
 - two runs with identical inputs produce different corpora
 """
 
@@ -17,9 +18,10 @@ import zipfile
 from pathlib import Path
 
 import mailparser
+from pypdf import PdfReader
 
 from api.pipeline.orchestrator import run_sync
-from api.pipeline.persona_registry import default_registry
+from api.pipeline.persona_registry import default_registry_with_pdf
 
 FIXTURE = Path(__file__).parent / "fixtures" / "speckled_band_excerpt.txt"
 
@@ -66,10 +68,9 @@ def test_smoke_manifest_hashes_match_corpus_files():
 
 def test_smoke_artifacts_are_owner_bound_to_registry():
     """Every artifact must be emitted by a persona/device pair the
-    Persona & Device Registry knows about. This is the slice-1
-    'provenance consistency' invariant."""
+    Persona & Device Registry knows about."""
     zip_bytes = _run()
-    registry = default_registry()
+    registry = default_registry_with_pdf()
     valid_persona_slugs = {_slug(p.display_name): p.id for p in registry.personas()}
     valid_device_labels = {
         d.label: d.owner_id
@@ -77,7 +78,9 @@ def test_smoke_artifacts_are_owner_bound_to_registry():
     }
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
         artifact_paths = [
-            n for n in zf.namelist() if n.startswith("corpus/") and n.endswith(".eml")
+            n
+            for n in zf.namelist()
+            if n.startswith("corpus/") and (n.endswith(".eml") or n.endswith(".pdf"))
         ]
     assert artifact_paths
     for path in artifact_paths:
@@ -119,6 +122,33 @@ def test_smoke_closure_passes_for_every_proposition():
         assert len(owners_per_prop[pid]) >= 2, (
             f"proposition {pid} has only {len(owners_per_prop[pid])} owner-distinct corroborators"
         )
+
+
+def test_smoke_corpus_contains_both_eml_and_pdf_artifacts():
+    """Slice-3 acceptance criterion: the corpus must contain both .eml and .pdf files."""
+    zip_bytes = _run()
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        names = zf.namelist()
+    eml_files = [n for n in names if n.startswith("corpus/") and n.endswith(".eml")]
+    pdf_files = [n for n in names if n.startswith("corpus/") and n.endswith(".pdf")]
+    assert eml_files, "corpus must contain at least one .eml artifact"
+    assert pdf_files, "corpus must contain at least one .pdf artifact"
+
+
+def test_smoke_pdf_artifacts_parseable_by_pypdf():
+    """Every .pdf in the corpus must be structurally valid and carry correct metadata."""
+    zip_bytes = _run()
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        pdf_names = [n for n in zf.namelist() if n.startswith("corpus/") and n.endswith(".pdf")]
+        assert pdf_names, "no PDF artifacts found"
+        for name in pdf_names:
+            payload = zf.read(name)
+            reader = PdfReader(io.BytesIO(payload))
+            assert len(reader.pages) >= 1
+            meta = reader.metadata
+            assert meta.get("/Author"), f"PDF {name} has no Author metadata"
+            assert meta.get("/Title"), f"PDF {name} has no Title metadata"
+            assert meta.get("/CreationDate"), f"PDF {name} has no CreationDate metadata"
 
 
 def test_smoke_two_runs_produce_different_corpora():

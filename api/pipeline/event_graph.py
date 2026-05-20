@@ -40,7 +40,16 @@ def build_events(
             devices = registry.devices_for(persona.id)
             if not devices:
                 raise ValueError(f"persona {persona.id} owns no devices")
-            device = devices[0]
+            # Alternate profiles: even-indexed propositions prefer PDF when
+            # available, giving a mixed corpus without hard-coding any persona.
+            pdf_devs = [d for d in devices if d.profile == "pdf_document"]
+            email_devs = [d for d in devices if d.profile == "email"]
+            if pdf_devs and prop_index % 2 == 0:
+                device = pdf_devs[0]
+            elif email_devs:
+                device = email_devs[0]
+            else:
+                device = devices[0]
             summary = gateway.complete(
                 "event_graph",
                 f"Describe a one-paragraph event corroborating: {prop.text}",

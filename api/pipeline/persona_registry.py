@@ -49,37 +49,62 @@ class PersonaRegistry:
         return device.owner_id == persona_id and device.profile == profile
 
 
+_PERSONAS = [
+    Persona(
+        id="p_holmes",
+        display_name="Sherlock Holmes",
+        email_address="holmes@baker-street.example",
+    ),
+    Persona(id="p_watson", display_name="John Watson", email_address="watson@baker-street.example"),
+    Persona(
+        id="p_hudson", display_name="Martha Hudson", email_address="hudson@baker-street.example"
+    ),
+    Persona(
+        id="p_lestrade",
+        display_name="G. Lestrade",
+        email_address="lestrade@scotlandyard.example",
+    ),
+]
+
+_EMAIL_DEVICES = [
+    Device(id="d_holmes_mail", owner_id="p_holmes", label="holmes-laptop", profile="email"),
+    Device(id="d_watson_mail", owner_id="p_watson", label="watson-laptop", profile="email"),
+    Device(id="d_hudson_mail", owner_id="p_hudson", label="hudson-tablet", profile="email"),
+    Device(id="d_lestrade_mail", owner_id="p_lestrade", label="lestrade-desktop", profile="email"),
+]
+
+_PDF_DEVICES = [
+    Device(
+        id="d_holmes_ws",
+        owner_id="p_holmes",
+        label="holmes-workstation",
+        profile="pdf_document",
+    ),
+    Device(
+        id="d_watson_ws",
+        owner_id="p_watson",
+        label="watson-workstation",
+        profile="pdf_document",
+    ),
+]
+
+
 def default_registry() -> PersonaRegistry:
-    """The tracer-bullet cast: four personas, one email device each.
+    """Slice-1 cast: four personas, one email device each.
 
     Four owners gives the Closure Verifier headroom for owner-distinct
     corroboration thresholds up to 4. Identifiers are stable so the e2e
     smoke test can assert on them.
     """
-    personas = [
-        Persona(
-            id="p_holmes",
-            display_name="Sherlock Holmes",
-            email_address="holmes@baker-street.example",
-        ),
-        Persona(
-            id="p_watson", display_name="John Watson", email_address="watson@baker-street.example"
-        ),
-        Persona(
-            id="p_hudson", display_name="Martha Hudson", email_address="hudson@baker-street.example"
-        ),
-        Persona(
-            id="p_lestrade",
-            display_name="G. Lestrade",
-            email_address="lestrade@scotlandyard.example",
-        ),
-    ]
-    devices = [
-        Device(id="d_holmes_mail", owner_id="p_holmes", label="holmes-laptop", profile="email"),
-        Device(id="d_watson_mail", owner_id="p_watson", label="watson-laptop", profile="email"),
-        Device(id="d_hudson_mail", owner_id="p_hudson", label="hudson-tablet", profile="email"),
-        Device(
-            id="d_lestrade_mail", owner_id="p_lestrade", label="lestrade-desktop", profile="email"
-        ),
-    ]
-    return PersonaRegistry(personas, devices)
+    return PersonaRegistry(list(_PERSONAS), list(_EMAIL_DEVICES))
+
+
+def default_registry_with_pdf() -> PersonaRegistry:
+    """Slice-3+ cast: four personas with email devices; Holmes and Watson
+    additionally own a workstation that permits PDF emission.
+
+    Hudson and Lestrade own no PDF-capable device, so the registry will
+    reject any attempt to emit a pdf_document artifact on their behalf —
+    exercising the permission-enforcement path.
+    """
+    return PersonaRegistry(list(_PERSONAS), list(_EMAIL_DEVICES) + list(_PDF_DEVICES))

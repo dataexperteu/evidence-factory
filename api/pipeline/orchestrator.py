@@ -23,7 +23,7 @@ from .closure_verifier import verify_closure
 from .event_graph import build_events
 from .llm_gateway import LLMGateway
 from .packager import PackagerInput, assert_separation, build_zip
-from .persona_registry import default_registry
+from .persona_registry import default_registry_with_pdf
 from .signal_ledger import SignalLedger
 from .source_intake import ingest_paste
 from .truth_extractor import extract_truth
@@ -90,7 +90,7 @@ async def run_pipeline(
     )
 
     yield ProgressEvent("events", "started"), None
-    registry = default_registry()
+    registry = default_registry_with_pdf()
     events = build_events(
         truth,
         registry,
