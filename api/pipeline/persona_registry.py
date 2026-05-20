@@ -28,8 +28,7 @@ class PersonaRegistry:
         for d in devices:
             if d.owner_id not in self._personas and d.owner_id not in self._systems:
                 raise RegistryError(
-                    f"device {d.id} has unknown owner {d.owner_id} "
-                    "(not a persona or system)"
+                    f"device {d.id} has unknown owner {d.owner_id} (not a persona or system)"
                 )
             self._devices[d.id] = d
 

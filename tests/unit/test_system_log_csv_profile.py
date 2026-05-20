@@ -115,7 +115,7 @@ def test_access_log_timestamp_monotonicity():
     timestamps = [datetime.fromisoformat(r["timestamp"]) for r in rows]
     for i in range(1, len(timestamps)):
         assert timestamps[i] >= timestamps[i - 1], (
-            f"access_log row {i} timestamp {timestamps[i]} precedes row {i - 1} {timestamps[i-1]}"
+            f"access_log row {i} timestamp {timestamps[i]} precedes row {i - 1} {timestamps[i - 1]}"
         )
 
 

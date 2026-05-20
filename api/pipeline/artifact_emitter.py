@@ -47,9 +47,7 @@ def _emit_email(
     persona = registry.get_persona(event.actor_id)
     device = registry.get_device(event.device_id)
     if not registry.is_permitted(persona.id, device.id, "email"):
-        raise ValueError(
-            f"persona {persona.id} not permitted to emit email on device {device.id}"
-        )
+        raise ValueError(f"persona {persona.id} not permitted to emit email on device {device.id}")
     recipient = _pick_recipient(registry, persona.id)
     body = gateway.complete(
         "artifact_content",
@@ -98,9 +96,7 @@ def _emit_system_log(
     subject_ids = event.subject_ids
 
     if not subject_ids:
-        raise ValueError(
-            f"system log event {event.id} has no subject_ids — cannot build CSV rows"
-        )
+        raise ValueError(f"system log event {event.id} has no subject_ids — cannot build CSV rows")
     _validate_subject_personas(registry, subject_ids)
 
     window_start = event.timestamp
@@ -127,9 +123,7 @@ def _emit_system_log(
         written = write_access_log(brief, disclaimer=disclaimer)
     else:
         if len(subject_ids) < 2:
-            raise ValueError(
-                f"CDR event {event.id} needs at least 2 subject_ids (caller + callee)"
-            )
+            raise ValueError(f"CDR event {event.id} needs at least 2 subject_ids (caller + callee)")
         calling_id, called_id = subject_ids[0], subject_ids[1]
         row = CdrRow(
             call_id=f"call_{event.id}",
