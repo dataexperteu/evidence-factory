@@ -152,8 +152,8 @@ test.describe("Full pipeline run — SSE progress and download", () => {
     const href = await download.getAttribute("href");
     expect(href).toMatch(/^\/api\/runs\/[0-9a-f]+\/zip$/);
 
-    const dl = download.getAttribute("download");
-    await expect(dl).toBeTruthy();
+    const dl = await download.getAttribute("download");
+    expect(dl).toBeTruthy();
   });
 
   test("clicking the download link delivers a zip file", async ({ page }) => {
