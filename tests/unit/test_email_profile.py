@@ -9,6 +9,7 @@ import email
 import hashlib
 from datetime import UTC, datetime
 from email.header import decode_header, make_header
+from typing import Any
 
 import mailparser
 import pytest
@@ -20,8 +21,8 @@ def _decoded(header_value: str) -> str:
     return str(make_header(decode_header(header_value)))
 
 
-def _brief(**overrides) -> EmailBrief:
-    defaults = dict(
+def _brief(**overrides: Any) -> EmailBrief:
+    defaults: dict[str, Any] = dict(
         sender_name="Sherlock Holmes",
         sender_address="holmes@baker-street.example",
         recipients=(("John Watson", "watson@baker-street.example"),),
