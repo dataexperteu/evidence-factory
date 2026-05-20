@@ -7,6 +7,7 @@ Layout:
   /SOLUTION/proposition_graph.json
   /SOLUTION/signal_ledger.json
   /SOLUTION/per_artifact_provenance.json
+  /SOLUTION/remediation_log.json     ← Smoking-Gun Critic + Remediator audit
 
 Invariant: nothing whose source is the SOLUTION pack may appear under /corpus.
 The zip writer enforces this by routing through `_corpus_member` /
@@ -44,6 +45,11 @@ class PackagerInput:
     attestation_text: str
     disclaimer: str
     run_id: str
+    # remediation_log captures every smoking-gun-critic verdict and every
+    # Remediator action (strategy + outcome) for the sealed pack.
+    # Defaults to a sensible empty shape so existing callers (and tests
+    # written before slice 8) continue to work without modification.
+    remediation_log: dict | None = None
 
 
 def _corpus_path(registry: PersonaRegistry, art: Artifact) -> str:
@@ -129,6 +135,21 @@ def build_zip(inp: PackagerInput) -> bytes:
         zf.writestr(
             "SOLUTION/per_artifact_provenance.json",
             json.dumps({"run_id": inp.run_id, "artifacts": provenance}, indent=2),
+        )
+
+        # Smoking-Gun Critic verdicts + Remediator activity. Always
+        # emitted — even an empty log is meaningful (it says nothing was
+        # flagged), and downstream consumers can rely on the file
+        # existing in every sealed pack.
+        zf.writestr(
+            "SOLUTION/remediation_log.json",
+            json.dumps(
+                {
+                    "run_id": inp.run_id,
+                    **(inp.remediation_log or {"verdicts": [], "remediations": []}),
+                },
+                indent=2,
+            ),
         )
 
     return buf.getvalue()

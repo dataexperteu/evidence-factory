@@ -97,3 +97,34 @@ class ClosureGap:
     required: int
     observed: int
     distinct_owners: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class CriticVerdict:
+    """One Smoking-Gun Critic verdict for an artifact.
+
+    `round` = 0 for the initial pass; 1+ for re-critic after remediation. The
+    same artifact_id may have multiple verdicts across rounds.
+    """
+
+    artifact_id: str
+    too_strong: bool
+    reason: str
+    round: int = 0
+
+
+@dataclass(frozen=True)
+class RemediationRecord:
+    """One critic-flag → strategy → outcome triple for the audit log.
+
+    Recorded on the Signal Ledger so the sealed `/SOLUTION` pack documents
+    what was flagged and how it was defused.
+    """
+
+    original_artifact_id: str
+    strategy: str  # "split" | "dilute" (slice 8) — "redact-relocate" | "demote" land later
+    new_artifact_ids: tuple[str, ...]
+    rounds: int
+    final_too_strong: bool  # True ⇒ persistent after MAX rounds, logged-and-continued
+    initial_reason: str
+    final_reason: str

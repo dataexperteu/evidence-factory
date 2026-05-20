@@ -111,8 +111,56 @@ def test_solution_pack_contains_required_files():
         "SOLUTION/proposition_graph.json",
         "SOLUTION/signal_ledger.json",
         "SOLUTION/per_artifact_provenance.json",
+        "SOLUTION/remediation_log.json",
     ):
         assert required in names, f"missing {required}"
+
+
+def test_remediation_log_default_is_empty_but_well_shaped():
+    """If no remediation_log is passed, the packager still emits a
+    structurally valid (empty) audit so downstream consumers can rely on
+    the file shape unconditionally."""
+    zip_bytes = build_zip(_make_input())
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        log = json.loads(zf.read("SOLUTION/remediation_log.json"))
+    assert log["run_id"] == "run123"
+    assert log["verdicts"] == []
+    assert log["remediations"] == []
+
+
+def test_remediation_log_passes_through_supplied_payload():
+    base = _make_input()
+    rl = {
+        "verdicts": [
+            {"artifact_id": "art_x", "too_strong": True, "reason": "r", "round": 0},
+        ],
+        "remediations": [
+            {
+                "original_artifact_id": "art_x",
+                "strategy": "split",
+                "new_artifact_ids": ["art_x_split_a", "art_x_split_b"],
+                "rounds": 1,
+                "final_too_strong": False,
+                "initial_reason": "r",
+                "final_reason": "ok",
+            }
+        ],
+    }
+    inp = PackagerInput(
+        truth=base.truth,
+        artifacts=base.artifacts,
+        ledger=base.ledger,
+        registry=base.registry,
+        attestation_text=base.attestation_text,
+        disclaimer=base.disclaimer,
+        run_id=base.run_id,
+        remediation_log=rl,
+    )
+    zip_bytes = build_zip(inp)
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        log = json.loads(zf.read("SOLUTION/remediation_log.json"))
+    assert log["verdicts"][0]["artifact_id"] == "art_x"
+    assert log["remediations"][0]["strategy"] == "split"
 
 
 def test_proposition_graph_json_is_valid_and_carries_run_id():

@@ -128,6 +128,52 @@ def test_smoke_two_runs_produce_different_corpora():
     assert z1 != z2
 
 
+def test_smoke_remediation_log_records_at_least_one_flag():
+    """Slice 8 acceptance: the resulting /SOLUTION pack shows non-empty
+    remediation activity on at least one artifact. With default settings
+    the fixture critic deterministically flags the first corroborator of
+    each proposition, so the log must contain ≥ 1 verdict with
+    `too_strong=true` and ≥ 1 remediation record."""
+    zip_bytes = _run()
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        log = json.loads(zf.read("SOLUTION/remediation_log.json"))
+    assert log["verdicts"], "remediation log has no critic verdicts"
+    assert any(v["too_strong"] for v in log["verdicts"]), (
+        "no critic verdict flagged an artifact as too_strong — fixture rule may have drifted"
+    )
+    assert log["remediations"], "remediation log has no remediation records"
+    for rec in log["remediations"]:
+        assert rec["strategy"] in ("split", "dilute")
+        assert rec["new_artifact_ids"], "remediation must produce at least one new artifact id"
+        assert rec["rounds"] <= 3, "bounded retry must terminate within 3 rounds"
+
+
+def test_smoke_remediation_new_artifacts_appear_in_corpus_and_manifest():
+    """Sanity: every remediation outcome artifact must materialise into
+    /corpus and have a manifest row — otherwise the audit log refers to
+    files the operator cannot inspect."""
+    zip_bytes = _run()
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        log = json.loads(zf.read("SOLUTION/remediation_log.json"))
+        provenance = json.loads(zf.read("SOLUTION/per_artifact_provenance.json"))
+        ledger = json.loads(zf.read("SOLUTION/signal_ledger.json"))
+    artifact_ids_in_corpus = {a["artifact_id"] for a in provenance["artifacts"]}
+    artifact_ids_in_ledger = {e["artifact_id"] for e in ledger["entries"]}
+    for rec in log["remediations"]:
+        for new_id in rec["new_artifact_ids"]:
+            assert new_id in artifact_ids_in_corpus, (
+                f"remediation outcome {new_id} missing from /corpus provenance"
+            )
+            assert new_id in artifact_ids_in_ledger, (
+                f"remediation outcome {new_id} missing from signal ledger"
+            )
+        # The original (smoking-gun) artifact must have been removed from
+        # the ledger when its replacements were recorded.
+        assert rec["original_artifact_id"] not in artifact_ids_in_ledger, (
+            f"flagged original {rec['original_artifact_id']} still in ledger"
+        )
+
+
 def _slug(s: str) -> str:
     import re
 

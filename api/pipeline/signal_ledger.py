@@ -11,12 +11,14 @@ Slice 1 invariants:
 
 from __future__ import annotations
 
-from .types import Artifact, LedgerEntry
+from .types import Artifact, CriticVerdict, LedgerEntry, RemediationRecord
 
 
 class SignalLedger:
     def __init__(self) -> None:
         self._entries: list[LedgerEntry] = []
+        self._verdicts: list[CriticVerdict] = []
+        self._remediations: list[RemediationRecord] = []
 
     def record(self, artifact: Artifact) -> None:
         self._entries.append(
@@ -30,6 +32,11 @@ class SignalLedger:
             )
         )
 
+    def remove(self, artifact_id: str) -> None:
+        """Drop a ledger entry. Used by the Remediator when an artifact is
+        replaced (split into fragments / diluted in place)."""
+        self._entries = [e for e in self._entries if e.artifact_id != artifact_id]
+
     def entries(self) -> list[LedgerEntry]:
         return list(self._entries)
 
@@ -38,6 +45,45 @@ class SignalLedger:
 
     def distinct_owners_for(self, proposition_id: str) -> set[str]:
         return {e.owner_id for e in self.corroborators_for(proposition_id)}
+
+    # -- critic / remediation audit log ----------------------------------
+
+    def record_verdict(self, verdict: CriticVerdict) -> None:
+        self._verdicts.append(verdict)
+
+    def record_remediation(self, record: RemediationRecord) -> None:
+        self._remediations.append(record)
+
+    def verdicts(self) -> list[CriticVerdict]:
+        return list(self._verdicts)
+
+    def remediations(self) -> list[RemediationRecord]:
+        return list(self._remediations)
+
+    def remediation_log_json(self) -> dict:
+        return {
+            "verdicts": [
+                {
+                    "artifact_id": v.artifact_id,
+                    "too_strong": v.too_strong,
+                    "reason": v.reason,
+                    "round": v.round,
+                }
+                for v in self._verdicts
+            ],
+            "remediations": [
+                {
+                    "original_artifact_id": r.original_artifact_id,
+                    "strategy": r.strategy,
+                    "new_artifact_ids": list(r.new_artifact_ids),
+                    "rounds": r.rounds,
+                    "final_too_strong": r.final_too_strong,
+                    "initial_reason": r.initial_reason,
+                    "final_reason": r.final_reason,
+                }
+                for r in self._remediations
+            ],
+        }
 
     def to_json_serialisable(self) -> list[dict]:
         return [
