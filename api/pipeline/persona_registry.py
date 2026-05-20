@@ -50,11 +50,12 @@ class PersonaRegistry:
 
 
 def default_registry() -> PersonaRegistry:
-    """The tracer-bullet cast: four personas, one email device each.
+    """Full cast: four email personas + two SMS (smartphone) personas.
 
-    Four owners gives the Closure Verifier headroom for owner-distinct
-    corroboration thresholds up to 4. Identifiers are stable so the e2e
-    smoke test can assert on them.
+    Email personas (indices 0-3) are the slice-1 tracer-bullet cast.
+    SMS personas (indices 4-5) are added in slice 4 and give the pipeline
+    SMS-capable devices for corroboration.  Identifiers are stable so the
+    e2e smoke tests can assert on them.
     """
     personas = [
         Persona(
@@ -73,6 +74,16 @@ def default_registry() -> PersonaRegistry:
             display_name="G. Lestrade",
             email_address="lestrade@scotlandyard.example",
         ),
+        Persona(
+            id="p_irene",
+            display_name="Irene Adler",
+            email_address="irene@adler.example",
+        ),
+        Persona(
+            id="p_moriarty",
+            display_name="Prof. Moriarty",
+            email_address="moriarty@crimefac.example",
+        ),
     ]
     devices = [
         Device(id="d_holmes_mail", owner_id="p_holmes", label="holmes-laptop", profile="email"),
@@ -80,6 +91,12 @@ def default_registry() -> PersonaRegistry:
         Device(id="d_hudson_mail", owner_id="p_hudson", label="hudson-tablet", profile="email"),
         Device(
             id="d_lestrade_mail", owner_id="p_lestrade", label="lestrade-desktop", profile="email"
+        ),
+        Device(
+            id="d_irene_sms", owner_id="p_irene", label="irene-smartphone", profile="sms"
+        ),
+        Device(
+            id="d_moriarty_sms", owner_id="p_moriarty", label="moriarty-smartphone", profile="sms"
         ),
     ]
     return PersonaRegistry(personas, devices)

@@ -18,15 +18,21 @@ from pathlib import Path
 
 import mailparser
 
-from api.pipeline.orchestrator import run_sync
+from api.pipeline.orchestrator import RunSettings, run_sync
 from api.pipeline.persona_registry import default_registry
 
 FIXTURE = Path(__file__).parent / "fixtures" / "speckled_band_excerpt.txt"
 
+# Default smoke run uses email-only personas (slice-1 behaviour unchanged).
+_EMAIL_SETTINGS = RunSettings(owners_per_proposition=3)
 
-def _run() -> bytes:
+# SMS smoke run uses all 6 personas so SMS devices get events.
+_SMS_SETTINGS = RunSettings(owners_per_proposition=6)
+
+
+def _run(settings: RunSettings | None = None) -> bytes:
     paste = FIXTURE.read_text(encoding="utf-8")
-    events, result = run_sync(paste, attestation_checked=True)
+    events, result = run_sync(paste, attestation_checked=True, settings=settings)
     failed = [e for e in events if e.status == "failed"]
     assert not failed, f"pipeline emitted failure events: {failed}"
     assert result is not None, "pipeline did not produce a result"
@@ -126,6 +132,58 @@ def test_smoke_two_runs_produce_different_corpora():
     z1 = _run()
     z2 = _run()
     assert z1 != z2
+
+
+def test_smoke_corpus_contains_sms_artifacts():
+    """Slice-4 acceptance criterion: running with SMS personas in scope produces
+    .csv SMS artifacts in the corpus owned by the SMS-capable personas."""
+    zip_bytes = _run(_SMS_SETTINGS)
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        names = zf.namelist()
+
+    sms_paths = [n for n in names if n.startswith("corpus/") and n.endswith(".csv")]
+    # Exclude corpus/manifest.csv — it lives directly under corpus/, not under a custodian
+    sms_artifact_paths = [p for p in sms_paths if p.count("/") == 3]
+    assert sms_artifact_paths, "no SMS .csv artifacts found in corpus"
+
+    registry = default_registry()
+    sms_persona_ids = {
+        p.id for p in registry.personas() if registry.devices_for(p.id)[0].profile == "sms"
+    }
+    sms_persona_slugs = {
+        _slug(registry.get_persona(pid).display_name) for pid in sms_persona_ids
+    }
+
+    for path in sms_artifact_paths:
+        _, custodian, _device, _filename = path.split("/")
+        assert custodian in sms_persona_slugs, (
+            f"SMS artifact {path} has custodian '{custodian}' not in SMS personas {sms_persona_slugs}"
+        )
+
+
+def test_smoke_sms_csv_round_trips_via_dictreader():
+    """Each .csv SMS artifact must be re-parseable by csv.DictReader with the documented schema."""
+    zip_bytes = _run(_SMS_SETTINGS)
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        names = zf.namelist()
+        sms_artifact_paths = [
+            n for n in names
+            if n.startswith("corpus/") and n.endswith(".csv") and n.count("/") == 3
+        ]
+        assert sms_artifact_paths
+
+        for path in sms_artifact_paths:
+            payload = zf.read(path).decode("utf-8")
+            rows = list(csv.DictReader(io.StringIO(payload)))
+            assert rows, f"{path} produced an empty CSV"
+            expected_cols = {"thread_id", "sender", "recipient", "timestamp_iso", "body"}
+            assert set(rows[0].keys()) == expected_cols, (
+                f"{path} has unexpected columns: {set(rows[0].keys())}"
+            )
+            for row in rows:
+                assert row["thread_id"], f"{path}: empty thread_id"
+                assert row["sender"], f"{path}: empty sender"
+                assert row["body"], f"{path}: empty body"
 
 
 def _slug(s: str) -> str:

@@ -11,7 +11,6 @@
  */
 
 import { expect, test } from "@playwright/test";
-import type { Download } from "@playwright/test";
 
 // Public-domain fixture — same corpus used by the Python smoke tests.
 const SOURCE = `\
@@ -162,7 +161,7 @@ test.describe("Full pipeline run — SSE progress and download", () => {
     await page.getByTestId("generate").click();
     await expect(page.getByTestId("stage-done-complete")).toBeVisible({ timeout: 30_000 });
 
-    const [download]: [Download] = await Promise.all([
+    const [download] = await Promise.all([
       page.waitForEvent("download"),
       page.getByTestId("download").click(),
     ]);
