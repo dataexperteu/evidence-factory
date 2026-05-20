@@ -1,7 +1,10 @@
-"""End-to-end smoke test: paste → corpus zip.
+"""End-to-end smoke tests.
 
-Runs the full slice-1 pipeline on a small fixed public-domain source
-(Speckled Band excerpt, Conan Doyle, 1892, public domain) and asserts:
+Slice 1: paste → corpus zip.
+Slice 2: URL path → corpus zip (local fixture server).
+
+Runs the full pipeline on a small fixed public-domain source (Speckled Band
+excerpt, Conan Doyle, 1892, public domain) and asserts:
 - the zip has /corpus and /SOLUTION
 - every manifest SHA-256 matches the file contents
 - closure passes
@@ -9,19 +12,26 @@ Runs the full slice-1 pipeline on a small fixed public-domain source
 - two runs with identical inputs produce different corpora
 """
 
+from __future__ import annotations
+
+import asyncio
 import csv
 import hashlib
 import io
 import json
+import threading
 import zipfile
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 import mailparser
 
 from api.pipeline.orchestrator import run_sync
 from api.pipeline.persona_registry import default_registry
+from api.pipeline.source_intake import ingest_url
 
 FIXTURE = Path(__file__).parent / "fixtures" / "speckled_band_excerpt.txt"
+HTML_FIXTURE = Path(__file__).parent / "fixtures" / "sample_article.html"
 
 
 def _run() -> bytes:
@@ -126,6 +136,39 @@ def test_smoke_two_runs_produce_different_corpora():
     z1 = _run()
     z2 = _run()
     assert z1 != z2
+
+
+def test_smoke_url_path_extracts_and_runs_pipeline():
+    """Slice 2: URL intake path exercises trafilatura extraction against a
+    local fixture HTTP server serving the HTML article fixture."""
+    html_content = HTML_FIXTURE.read_bytes()
+
+    class _FixtureHandler(BaseHTTPRequestHandler):
+        def do_GET(self) -> None:  # noqa: N802
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Content-Length", str(len(html_content)))
+            self.end_headers()
+            self.wfile.write(html_content)
+
+        def log_message(self, *args: object) -> None:
+            pass  # suppress request log noise
+
+    server = HTTPServer(("127.0.0.1", 0), _FixtureHandler)
+    port = server.server_address[1]
+    thread = threading.Thread(target=server.handle_request, daemon=True)
+    thread.start()
+
+    url = f"http://127.0.0.1:{port}/article"
+    source = asyncio.run(ingest_url(url))
+    assert source.char_count > 50, "expected readable text extracted from HTML fixture"
+    assert any(
+        kw in source.body.lower()
+        for kw in ("holmes", "speckled", "watson", "sherlock", "young lady")
+    ), f"extracted text does not look like the fixture: {source.body[:200]!r}"
+
+    thread.join(timeout=2)
+    server.server_close()
 
 
 def _slug(s: str) -> str:
