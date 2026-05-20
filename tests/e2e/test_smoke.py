@@ -6,6 +6,8 @@ Runs the full slice-1 pipeline on a small fixed public-domain source
 - every manifest SHA-256 matches the file contents
 - closure passes
 - every artifact is owner-bound to a persona/device in the registry
+- corpus contains both email (.eml) and system_log_csv (.csv) artifacts
+- CSV artifacts match the access_log or cdr schema
 - two runs with identical inputs produce different corpora
 """
 
@@ -126,6 +128,60 @@ def test_smoke_two_runs_produce_different_corpora():
     z1 = _run()
     z2 = _run()
     assert z1 != z2
+
+
+def test_smoke_corpus_contains_email_and_csv_artifacts():
+    """Corpus must include both email (.eml) and system_log_csv (.csv) artifacts."""
+    zip_bytes = _run()
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        names = zf.namelist()
+    eml_paths = [n for n in names if n.startswith("corpus/") and n.endswith(".eml")]
+    csv_artifact_paths = [
+        n
+        for n in names
+        if n.startswith("corpus/") and n.endswith(".csv") and n != "corpus/manifest.csv"
+    ]
+    assert eml_paths, "corpus must contain at least one .eml artifact (email profile)"
+    assert csv_artifact_paths, "corpus must contain at least one .csv artifact (system_log_csv)"
+
+
+def test_smoke_csv_artifacts_have_correct_schema():
+    """CSV artifacts in corpus parse via csv.DictReader and match access_log or cdr schema."""
+    access_log_fields = frozenset(
+        {"timestamp", "controller_id", "badge_id", "persona_id", "door_id", "granted"}
+    )
+    cdr_fields = frozenset(
+        {
+            "call_id",
+            "start_time",
+            "end_time",
+            "calling_persona_id",
+            "called_persona_id",
+            "calling_number",
+            "called_number",
+            "direction",
+        }
+    )
+    valid_schemas = (access_log_fields, cdr_fields)
+
+    zip_bytes = _run()
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        csv_artifact_paths = [
+            n
+            for n in zf.namelist()
+            if n.startswith("corpus/") and n.endswith(".csv") and n != "corpus/manifest.csv"
+        ]
+        assert csv_artifact_paths, "no .csv artifacts found in corpus"
+        seen_schemas: set[frozenset[str]] = set()
+        for path in csv_artifact_paths:
+            text = zf.read(path).decode("utf-8")
+            rows = list(csv.DictReader(io.StringIO(text)))
+            assert rows, f"{path} has no data rows"
+            fields = frozenset(rows[0].keys())
+            assert fields in valid_schemas, f"{path} has unexpected schema: {set(fields)}"
+            seen_schemas.add(fields)
+    assert access_log_fields in seen_schemas, "corpus must contain an access_log CSV"
+    assert cdr_fields in seen_schemas, "corpus must contain a cdr CSV"
 
 
 def _slug(s: str) -> str:
