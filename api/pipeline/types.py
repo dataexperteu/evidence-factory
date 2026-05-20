@@ -44,7 +44,10 @@ class Device:
     id: str
     owner_id: str
     label: str
-    profile: Literal["email"]
+    profile: Literal["email", "jpeg_exif_photo"]
+    make: str = ""
+    model: str = ""
+    gps_capable: bool = False
 
 
 @dataclass(frozen=True)
@@ -57,6 +60,7 @@ class Event:
     device_id: str
     summary: str
     proposition_ids: tuple[str, ...]
+    location: tuple[float, float] | None = None  # (lat, lon) decimal degrees; used by GPS-capable profiles
 
 
 @dataclass(frozen=True)
@@ -66,7 +70,7 @@ class Artifact:
     id: str
     owner_id: str
     device_id: str
-    profile: Literal["email"]
+    profile: Literal["email", "jpeg_exif_photo"]
     filename: str
     payload: bytes
     sha256: str
