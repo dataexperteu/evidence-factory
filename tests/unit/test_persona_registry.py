@@ -6,13 +6,28 @@ from api.pipeline.persona_registry import PersonaRegistry, RegistryError, defaul
 from api.pipeline.types import Device, Persona
 
 
-def test_default_registry_has_four_email_personas():
+def test_default_registry_has_four_personas_with_email_devices():
     reg = default_registry()
     assert len(reg.personas()) == 4
     for persona in reg.personas():
         devs = reg.devices_for(persona.id)
-        assert len(devs) == 1
-        assert devs[0].profile == "email"
+        assert any(d.profile == "email" for d in devs), (
+            f"persona {persona.id} has no email device"
+        )
+
+
+def test_default_registry_xlsx_devices_for_workstation_personas():
+    """Holmes and Watson have xlsx_ledger workstation devices (slice 5)."""
+    reg = default_registry()
+    holmes_devs = reg.devices_for("p_holmes")
+    watson_devs = reg.devices_for("p_watson")
+    assert any(d.profile == "xlsx_ledger" for d in holmes_devs)
+    assert any(d.profile == "xlsx_ledger" for d in watson_devs)
+    # Hudson and Lestrade remain email-only
+    hudson_devs = reg.devices_for("p_hudson")
+    lestrade_devs = reg.devices_for("p_lestrade")
+    assert all(d.profile == "email" for d in hudson_devs)
+    assert all(d.profile == "email" for d in lestrade_devs)
 
 
 def test_is_permitted_only_for_owner_device_profile():

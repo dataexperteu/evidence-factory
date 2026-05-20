@@ -55,6 +55,11 @@ def default_registry() -> PersonaRegistry:
     Four owners gives the Closure Verifier headroom for owner-distinct
     corroboration thresholds up to 4. Identifiers are stable so the e2e
     smoke test can assert on them.
+
+    Holmes and Watson each have a secondary xlsx_ledger device (workstation)
+    demonstrating that the registry permits the xlsx profile for personas
+    owning a workstation/laptop. The event graph picks devices[0] (email)
+    so the default pipeline still emits only .eml artifacts.
     """
     personas = [
         Persona(
@@ -76,7 +81,19 @@ def default_registry() -> PersonaRegistry:
     ]
     devices = [
         Device(id="d_holmes_mail", owner_id="p_holmes", label="holmes-laptop", profile="email"),
+        Device(
+            id="d_holmes_xlsx",
+            owner_id="p_holmes",
+            label="holmes-workstation",
+            profile="xlsx_ledger",
+        ),
         Device(id="d_watson_mail", owner_id="p_watson", label="watson-laptop", profile="email"),
+        Device(
+            id="d_watson_xlsx",
+            owner_id="p_watson",
+            label="watson-workstation",
+            profile="xlsx_ledger",
+        ),
         Device(id="d_hudson_mail", owner_id="p_hudson", label="hudson-tablet", profile="email"),
         Device(
             id="d_lestrade_mail", owner_id="p_lestrade", label="lestrade-desktop", profile="email"
