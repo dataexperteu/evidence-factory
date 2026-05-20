@@ -10,6 +10,8 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Literal
 
+ProfileType = Literal["email", "system_log_csv"]
+
 
 @dataclass(frozen=True)
 class Proposition:
@@ -38,18 +40,32 @@ class Persona:
 
 
 @dataclass(frozen=True)
+class System:
+    """A system entity (building controller, PBX) that owns log-emitting devices."""
+
+    id: str
+    label: str
+    log_variant: Literal["access_log", "cdr"]
+
+
+@dataclass(frozen=True)
 class Device:
-    """A device or account owned by a Persona, capable of emitting one profile."""
+    """A device or account owned by a Persona or System, capable of emitting one profile."""
 
     id: str
     owner_id: str
     label: str
-    profile: Literal["email"]
+    profile: ProfileType
 
 
 @dataclass(frozen=True)
 class Event:
-    """A timestamped, persona-owned event bound to one or more propositions."""
+    """A timestamped event bound to one or more propositions.
+
+    For persona-owned events actor_id is a persona id; for system-owned log
+    events it is a system id and subject_ids lists the personas referenced in
+    the emitted CSV rows.
+    """
 
     id: str
     timestamp: datetime
@@ -57,6 +73,7 @@ class Event:
     device_id: str
     summary: str
     proposition_ids: tuple[str, ...]
+    subject_ids: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -66,7 +83,7 @@ class Artifact:
     id: str
     owner_id: str
     device_id: str
-    profile: Literal["email"]
+    profile: ProfileType
     filename: str
     payload: bytes
     sha256: str

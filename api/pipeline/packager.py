@@ -47,9 +47,9 @@ class PackagerInput:
 
 
 def _corpus_path(registry: PersonaRegistry, art: Artifact) -> str:
-    persona = registry.get_persona(art.owner_id)
+    owner_label = registry.get_owner_label(art.owner_id)
     device = registry.get_device(art.device_id)
-    return f"corpus/{_slug(persona.display_name)}/{_slug(device.label)}/{art.filename}"
+    return f"corpus/{_slug(owner_label)}/{_slug(device.label)}/{art.filename}"
 
 
 def build_zip(inp: PackagerInput) -> bytes:
@@ -74,7 +74,7 @@ def build_zip(inp: PackagerInput) -> bytes:
             manifest_rows.append(
                 {
                     "acquisition_time": art.acquisition_time.isoformat(),
-                    "owner": inp.registry.get_persona(art.owner_id).display_name,
+                    "owner": inp.registry.get_owner_label(art.owner_id),
                     "device": inp.registry.get_device(art.device_id).label,
                     "path": path,
                     "sha256": art.sha256,

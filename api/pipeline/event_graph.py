@@ -1,11 +1,15 @@
-"""Event Graph Builder — skeleton.
+"""Event Graph Builder.
 
 CanonicalTruth + Persona registry → list[Event].
 
-Slice 1 contract: per proposition, emit one event per persona-device so the
-Closure Verifier can find ≥ N owner-distinct corroborators. Timestamps are
-spread across a synthetic week to keep the timeline coherent without doing
-any real timeline reasoning (later slices add an LLM-backed builder).
+For each proposition this builder emits:
+  - one email event per persona owner (up to owners_per_proposition)
+  - one access_log event per access-controller system device
+  - one CDR event per PBX system device
+
+System log events carry subject_ids drawn from the first two personas so
+the Artifact Emitter can populate CSV rows referencing known registry members.
+Timestamps are spread deterministically to keep the timeline coherent.
 """
 
 from __future__ import annotations
@@ -32,9 +36,14 @@ def build_events(
             f"owners_per_proposition={owners_per_proposition} exceeds registry size {len(personas)}"
         )
 
+    # Two personas referenced as subjects in system log rows.
+    log_subjects = tuple(p.id for p in personas[:2])
+
     events: list[Event] = []
-    counter = 0
     for prop_index, prop in enumerate(truth.graph.propositions):
+        prop_base = base + timedelta(days=prop_index)
+
+        # Email events — one per persona owner.
         for owner_index in range(owners_per_proposition):
             persona = personas[owner_index]
             devices = registry.devices_for(persona.id)
@@ -46,7 +55,7 @@ def build_events(
                 f"Describe a one-paragraph event corroborating: {prop.text}",
                 cache_key=f"timeline::{prop.id}",
             )
-            ts = base + timedelta(days=prop_index, hours=owner_index * 3)
+            ts = prop_base + timedelta(hours=owner_index * 3)
             events.append(
                 Event(
                     id=f"ev_{prop.id}_{owner_index + 1}",
@@ -57,5 +66,23 @@ def build_events(
                     proposition_ids=(prop.id,),
                 )
             )
-            counter += 1
+
+        # System log events — one per system device.
+        for system in registry.systems():
+            sys_devices = registry.devices_for_system(system.id)
+            for dev_index, sys_dev in enumerate(sys_devices):
+                # Offset system events to after email events for the day.
+                ts = prop_base + timedelta(hours=owners_per_proposition * 3 + dev_index)
+                events.append(
+                    Event(
+                        id=f"ev_{prop.id}_sys_{system.id}_{dev_index}",
+                        timestamp=ts,
+                        actor_id=system.id,
+                        device_id=sys_dev.id,
+                        summary=f"System log covering proposition: {prop.text[:60]}",
+                        proposition_ids=(prop.id,),
+                        subject_ids=log_subjects,
+                    )
+                )
+
     return events
