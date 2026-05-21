@@ -40,7 +40,9 @@ def build_events(
             devices = registry.devices_for(persona.id)
             if not devices:
                 raise ValueError(f"persona {persona.id} owns no devices")
-            device = devices[0]
+            # Cycle through the persona's devices across owner slots so that
+            # the resulting corpus mixes all available profiles (e.g. email and pdf).
+            device = devices[owner_index % len(devices)]
             summary = gateway.complete(
                 "event_graph",
                 f"Describe a one-paragraph event corroborating: {prop.text}",

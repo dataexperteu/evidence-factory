@@ -2,6 +2,7 @@
 
 Slice 1: paste → corpus zip.
 Slice 2: URL path → corpus zip (local fixture server).
+Slice 3: corpus contains both .eml and .pdf artifacts.
 
 Runs the full pipeline on a small fixed public-domain source (Speckled Band
 excerpt, Conan Doyle, 1892, public domain) and asserts:
@@ -9,6 +10,7 @@ excerpt, Conan Doyle, 1892, public domain) and asserts:
 - every manifest SHA-256 matches the file contents
 - closure passes
 - every artifact is owner-bound to a persona/device in the registry
+- corpus contains both .eml and .pdf artifacts
 - two runs with identical inputs produce different corpora
 """
 
@@ -25,6 +27,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 import mailparser
+import pypdf
 
 from api.pipeline.orchestrator import run_sync
 from api.pipeline.persona_registry import default_registry
@@ -111,6 +114,55 @@ def test_smoke_artifacts_are_rfc822_parseable_by_independent_library():
             assert parsed.subject  # has a subject
             assert parsed.from_ and parsed.from_[0][1]  # has a From address
             assert parsed.to and parsed.to[0][1]  # has a To address
+
+
+def test_smoke_corpus_contains_both_eml_and_pdf():
+    """Slice 3: the corpus must mix .eml and .pdf artifacts."""
+    zip_bytes = _run()
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        names = zf.namelist()
+    eml = [n for n in names if n.startswith("corpus/") and n.endswith(".eml")]
+    pdf = [n for n in names if n.startswith("corpus/") and n.endswith(".pdf")]
+    assert eml, "corpus must contain .eml artifacts"
+    assert pdf, "corpus must contain .pdf artifacts"
+
+
+def test_smoke_pdf_artifacts_parseable_and_have_metadata():
+    """Every .pdf in the corpus must parse via pypdf with author and title."""
+    zip_bytes = _run()
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        pdf_paths = [n for n in zf.namelist() if n.startswith("corpus/") and n.endswith(".pdf")]
+    assert pdf_paths, "expected at least one .pdf artifact in the corpus"
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        for path in pdf_paths:
+            payload = zf.read(path)
+            reader = pypdf.PdfReader(io.BytesIO(payload))
+            meta = reader.metadata
+            assert meta.author, f"PDF {path} missing /Author"
+            assert meta.title, f"PDF {path} missing /Title"
+
+
+def test_smoke_pdf_artifacts_are_owner_bound_to_registry():
+    """Every .pdf artifact must be placed under its owning persona/device path."""
+    zip_bytes = _run()
+    registry = default_registry()
+    valid_persona_slugs = {_slug(p.display_name): p.id for p in registry.personas()}
+    valid_device_labels = {
+        d.label: d.owner_id
+        for p in registry.personas()
+        for d in registry.devices_for(p.id)
+    }
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        pdf_paths = [n for n in zf.namelist() if n.startswith("corpus/") and n.endswith(".pdf")]
+    assert pdf_paths
+    for path in pdf_paths:
+        _, custodian, device, _ = path.split("/")
+        assert custodian in valid_persona_slugs, f"unknown custodian slug {custodian}"
+        assert device in valid_device_labels, f"unknown device label {device}"
+        owner_of_device = valid_device_labels[device]
+        assert valid_persona_slugs[custodian] == owner_of_device, (
+            f"device {device} not owned by {custodian}"
+        )
 
 
 def test_smoke_closure_passes_for_every_proposition():

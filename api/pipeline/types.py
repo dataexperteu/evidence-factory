@@ -44,7 +44,7 @@ class Device:
     id: str
     owner_id: str
     label: str
-    profile: Literal["email"]
+    profile: Literal["email", "pdf"]
 
 
 @dataclass(frozen=True)
@@ -66,7 +66,7 @@ class Artifact:
     id: str
     owner_id: str
     device_id: str
-    profile: Literal["email"]
+    profile: Literal["email", "pdf"]
     filename: str
     payload: bytes
     sha256: str

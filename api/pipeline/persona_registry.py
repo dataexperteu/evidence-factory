@@ -50,11 +50,12 @@ class PersonaRegistry:
 
 
 def default_registry() -> PersonaRegistry:
-    """The tracer-bullet cast: four personas, one email device each.
+    """Four personas, each with one email device and one PDF workstation.
 
     Four owners gives the Closure Verifier headroom for owner-distinct
     corroboration thresholds up to 4. Identifiers are stable so the e2e
-    smoke test can assert on them.
+    smoke test can assert on them. Slice 3 adds the PDF workstation devices
+    so document-shaped events can be routed to the PDF profile.
     """
     personas = [
         Persona(
@@ -76,10 +77,34 @@ def default_registry() -> PersonaRegistry:
     ]
     devices = [
         Device(id="d_holmes_mail", owner_id="p_holmes", label="holmes-laptop", profile="email"),
+        Device(
+            id="d_holmes_workstation",
+            owner_id="p_holmes",
+            label="holmes-workstation",
+            profile="pdf",
+        ),
         Device(id="d_watson_mail", owner_id="p_watson", label="watson-laptop", profile="email"),
+        Device(
+            id="d_watson_workstation",
+            owner_id="p_watson",
+            label="watson-workstation",
+            profile="pdf",
+        ),
         Device(id="d_hudson_mail", owner_id="p_hudson", label="hudson-tablet", profile="email"),
         Device(
+            id="d_hudson_workstation",
+            owner_id="p_hudson",
+            label="hudson-workstation",
+            profile="pdf",
+        ),
+        Device(
             id="d_lestrade_mail", owner_id="p_lestrade", label="lestrade-desktop", profile="email"
+        ),
+        Device(
+            id="d_lestrade_workstation",
+            owner_id="p_lestrade",
+            label="lestrade-workstation",
+            profile="pdf",
         ),
     ]
     return PersonaRegistry(personas, devices)

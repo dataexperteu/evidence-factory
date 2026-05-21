@@ -6,13 +6,15 @@ from api.pipeline.persona_registry import PersonaRegistry, RegistryError, defaul
 from api.pipeline.types import Device, Persona
 
 
-def test_default_registry_has_four_email_personas():
+def test_default_registry_has_four_personas_with_email_and_pdf_devices():
+    """Slice 3: each persona owns one email device and one PDF workstation."""
     reg = default_registry()
     assert len(reg.personas()) == 4
     for persona in reg.personas():
         devs = reg.devices_for(persona.id)
-        assert len(devs) == 1
-        assert devs[0].profile == "email"
+        profiles = {d.profile for d in devs}
+        assert "email" in profiles, f"{persona.id} missing email device"
+        assert "pdf" in profiles, f"{persona.id} missing pdf device"
 
 
 def test_is_permitted_only_for_owner_device_profile():
