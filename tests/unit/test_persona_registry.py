@@ -41,3 +41,31 @@ def test_unknown_persona_lookup_raises():
         reg.get_persona("p_missing")
     with pytest.raises(RegistryError):
         reg.get_device("d_missing")
+
+
+def test_validate_persona_ids_accepts_known_ids():
+    reg = default_registry()
+    known_ids = tuple(reg.persona_ids())
+    reg.validate_persona_ids(known_ids)  # must not raise
+
+
+def test_validate_persona_ids_rejects_unknown_id():
+    reg = default_registry()
+    with pytest.raises(RegistryError, match="p_ghost"):
+        reg.validate_persona_ids(("p_holmes", "p_ghost"))
+
+
+def test_default_registry_has_two_system_actors():
+    reg = default_registry()
+    assert reg.is_system_actor("sys_bldg_access")
+    assert reg.is_system_actor("sys_pbx")
+    assert not reg.is_system_actor("p_holmes")
+
+
+def test_system_devices_owned_by_system_actors():
+    reg = default_registry()
+    sys_devs = reg.system_devices()
+    assert len(sys_devs) == 2
+    for dev in sys_devs:
+        assert reg.is_system_actor(dev.owner_id)
+        assert dev.profile == "system_log_csv"

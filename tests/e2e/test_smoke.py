@@ -138,6 +138,20 @@ def test_smoke_two_runs_produce_different_corpora():
     assert z1 != z2
 
 
+def test_smoke_corpus_contains_both_email_and_csv_artifacts():
+    """Corpus must contain artifacts from both implemented profiles: email and system_log_csv."""
+    zip_bytes = _run()
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        names = zf.namelist()
+    eml_paths = [n for n in names if n.startswith("corpus/") and n.endswith(".eml")]
+    csv_paths = [
+        n for n in names
+        if n.startswith("corpus/") and n.endswith(".csv") and n != "corpus/manifest.csv"
+    ]
+    assert eml_paths, "corpus must contain at least one .eml artifact"
+    assert csv_paths, "corpus must contain at least one system_log_csv artifact (.csv)"
+
+
 def test_smoke_url_path_extracts_and_runs_pipeline():
     """Slice 2: URL intake path exercises trafilatura extraction against a
     local fixture HTTP server serving the HTML article fixture."""

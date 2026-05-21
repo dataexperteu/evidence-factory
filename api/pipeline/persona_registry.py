@@ -87,6 +87,18 @@ class PersonaRegistry:
     # System-actor queries
     # ------------------------------------------------------------------
 
+    def validate_persona_ids(self, persona_ids: tuple[str, ...]) -> None:
+        """Raise RegistryError if any persona_id is not in the registry.
+
+        Called by the Artifact Emitter before writing a system log so that
+        an emission with an unknown persona_id is rejected by construction.
+        """
+        unknown = set(persona_ids) - self._personas.keys()
+        if unknown:
+            raise RegistryError(
+                f"system log references persona ids not in registry: {sorted(unknown)}"
+            )
+
     def is_system_actor(self, actor_id: str) -> bool:
         return actor_id in self._system_actors
 

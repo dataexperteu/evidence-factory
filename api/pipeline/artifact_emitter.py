@@ -85,10 +85,11 @@ def _emit_system_log(
             f"system actor {system_actor.id} not permitted to emit system_log_csv "
             f"on device {device.id}"
         )
-    # Row subjects: all personas in the registry; reject unknown IDs at write time
+    # Row subjects: all personas in the registry; validate and reject unknown IDs.
     persona_ids = tuple(sorted(registry.persona_ids()))
     if not persona_ids:
         raise ValueError("registry must contain at least one persona for system log rows")
+    registry.validate_persona_ids(persona_ids)
     brief = SystemLogBrief(
         schema=system_actor.log_schema,
         device_id=device.id,
