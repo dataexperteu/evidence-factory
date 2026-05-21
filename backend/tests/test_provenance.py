@@ -209,7 +209,7 @@ def test_xlsx_ledger_metadata_round_trips(catalog: ProvenanceCatalog) -> None:
     assert props.lastModifiedBy == "Alice Smith"
     assert props.created is not None
     assert props.modified is not None
-    assert props.modified >= props.created  # type: ignore[operator]
+    assert props.modified >= props.created
 
 
 def test_xlsx_ledger_single_sheet_with_rows(catalog: ProvenanceCatalog) -> None:
