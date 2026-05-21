@@ -21,7 +21,7 @@ from ..provenance.email_profile import EmailBrief, write_email
 from .closure_verifier import verify_closure
 from .critic import SmokingGunCritic
 from .persona_registry import PersonaRegistry
-from .remediator import DILUTE_FACTOR, StrategySelector, remediate
+from .remediator import DILUTE_FACTOR, SPLIT_FRAGMENTS, StrategySelector, remediate
 from .signal_ledger import SignalLedger
 from .types import Artifact, CanonicalTruth, ClosureResult, PropositionGraph
 
@@ -61,6 +61,7 @@ def run_critique_pass(
     selector: StrategySelector,
     ledger: SignalLedger,
     disclaimer: str,
+    fragmentation_factor: int = SPLIT_FRAGMENTS,
     max_rounds: int = MAX_REMEDIATION_ROUNDS,
 ) -> tuple[list[Artifact], list[RemediationRecord]]:
     """Critique + remediate every artifact. Returns (final_artifacts, log).
@@ -97,7 +98,9 @@ def run_critique_pass(
             continue
 
         strategy = selector.choose(artifact)
-        products = remediate(artifact, strategy, registry, disclaimer=disclaimer)
+        products = remediate(
+            artifact, strategy, registry, disclaimer=disclaimer, fragments=fragmentation_factor
+        )
         record = RemediationRecord(
             flagged_artifact_id=artifact.id,
             reason=verdict.reason,

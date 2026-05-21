@@ -40,7 +40,9 @@ def _brief(**overrides: object) -> SystemLogBrief:
 
 def _parse(raw: bytes) -> tuple[list[dict[str, str]], list[str]]:
     decoded = raw.decode("utf-8")
-    reader = csv.DictReader(io.StringIO(decoded))
+    # Skip the leading synthetic-evidence comment row(s) the watermark adds.
+    body = "\n".join(ln for ln in decoded.splitlines() if not ln.startswith("#"))
+    reader = csv.DictReader(io.StringIO(body))
     rows = list(reader)
     return rows, list(reader.fieldnames or [])
 

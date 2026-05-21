@@ -18,9 +18,10 @@ import secrets
 from collections.abc import AsyncIterator
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime, timedelta
+from typing import Literal
 
 from .artifact_emitter import emit_artifacts
-from .attestation import SYNTHETIC_EVIDENCE_DISCLAIMER, gate
+from .attestation import gate
 from .closure_verifier import verify_closure
 from .critic import SmokingGunCritic
 from .event_graph import build_events
@@ -29,6 +30,7 @@ from .noise_generator import NoiseGenerator
 from .noise_guard import LeakContradictGuard
 from .packager import PackagerInput, assert_separation, build_zip
 from .persona_registry import default_registry
+from .red_herring_designer import DesignerSettings, design_red_herrings
 from .remediation import run_critique_pass, top_up_closure
 from .remediator import RandomStrategySelector
 from .signal_ledger import SignalLedger
@@ -36,6 +38,7 @@ from .source_intake import ingest_paste
 from .truth_extractor import extract_truth
 
 _TOPUP_BASE_TIME = datetime(2024, 6, 10, 9, 0, 0, tzinfo=UTC)
+_REDHERRING_BASE_TIME = datetime(2024, 6, 20, 9, 0, 0, tzinfo=UTC)
 
 LOG = logging.getLogger("evidence_factory.orchestrator")
 
@@ -61,13 +64,60 @@ class RunResult:
     noise_count: int = 0
 
 
+DifficultyPreset = Literal["easy", "medium", "hard"]
+
+_PRESET_VALUES: dict[str, dict] = {
+    "easy": dict(
+        min_owner_distinct=2,
+        owners_per_proposition=2,
+        fragmentation_factor=2,
+        dominance_margin=0.5,
+        target_artifact_count=100,
+        red_herring_count=1,
+        noise_count=80,
+    ),
+    "medium": dict(
+        min_owner_distinct=3,
+        owners_per_proposition=3,
+        fragmentation_factor=3,
+        dominance_margin=0.3,
+        target_artifact_count=400,
+        red_herring_count=3,
+        noise_count=350,
+    ),
+    "hard": dict(
+        min_owner_distinct=5,
+        owners_per_proposition=5,
+        fragmentation_factor=5,
+        dominance_margin=0.15,
+        target_artifact_count=1000,
+        red_herring_count=6,
+        noise_count=950,
+    ),
+}
+
+
 @dataclass
 class RunSettings:
     min_owner_distinct: int = 2  # closure threshold; default keeps tests fast
     owners_per_proposition: int = 3  # > threshold so default runs pass closure
     max_propositions: int = 3
-    noise_target: int = 300  # PRD default haystack volume
-    noise_max: int = 1000  # PRD hard cap
+    red_herring_breaker_margin: float = 0.5  # breaker bundle must exceed support by this
+    fragmentation_factor: int = 3  # mean artifact fragments per split remediation
+    dominance_margin: float = 0.3  # truth's lead over best alternative
+    target_artifact_count: int = 400  # total corpus size target (used by noise generator)
+    red_herring_count: int = 3  # number of red-herring artifacts to inject
+    noise_count: int = 350  # number of Haiku-generated haystack noise artifacts
+    noise_max: int = 1000  # PRD hard cap on haystack volume
+
+
+def settings_for_preset(preset: DifficultyPreset) -> RunSettings:
+    """Return a RunSettings configured for the given difficulty preset."""
+    if preset not in _PRESET_VALUES:
+        raise ValueError(
+            f"unknown difficulty preset: {preset!r}; expected one of {list(_PRESET_VALUES)}"
+        )
+    return RunSettings(**_PRESET_VALUES[preset])
 
 
 async def run_pipeline(
@@ -85,7 +135,8 @@ async def run_pipeline(
     yield ProgressEvent("intake", "started", {"run_id": run_id}), None
     try:
         source = ingest_paste(source_paste)
-        attestation = gate(attestation_checked)
+        case = gate(attestation_checked)
+        disclaimer = case.disclaimer
     except Exception as e:
         yield ProgressEvent("intake", "failed", {"error": str(e)}), None
         return
@@ -115,7 +166,7 @@ async def run_pipeline(
     yield ProgressEvent("emit", "started"), None
     ledger = SignalLedger()
     artifacts = emit_artifacts(
-        events, registry, ledger, gateway=gateway, disclaimer=SYNTHETIC_EVIDENCE_DISCLAIMER
+        events, registry, ledger, gateway=gateway, disclaimer=disclaimer
     )
     yield ProgressEvent("emit", "complete", {"artifacts": len(artifacts)}), None
 
@@ -129,7 +180,8 @@ async def run_pipeline(
         critic=critic,
         selector=selector,
         ledger=ledger,
-        disclaimer=SYNTHETIC_EVIDENCE_DISCLAIMER,
+        disclaimer=disclaimer,
+        fragmentation_factor=settings.fragmentation_factor,
     )
     remediated = sum(1 for r in remediation_log if r.outcome == "remediated")
     unresolved = sum(1 for r in remediation_log if r.outcome == "failed_after_retries")
@@ -142,20 +194,62 @@ async def run_pipeline(
         None,
     )
 
+    yield ProgressEvent("redherring", "started"), None
+    red_herrings, rh_artifacts = design_red_herrings(
+        truth,
+        registry,
+        critic=critic,
+        disclaimer=disclaimer,
+        base_time=_REDHERRING_BASE_TIME,
+        scheduled=ledger.scheduled_red_herrings(),
+        existing_artifacts=artifacts,
+        ledger=ledger,
+        settings=DesignerSettings(min_red_herrings=settings.red_herring_count),
+    )
+    for art in rh_artifacts:
+        ledger.record(art)
+        artifacts.append(art)
+    yield (
+        ProgressEvent(
+            "redherring",
+            "complete",
+            {
+                "red_herrings": len(red_herrings),
+                "breaker_artifacts": sum(len(r.breakers) for r in red_herrings),
+            },
+        ),
+        None,
+    )
+
     yield ProgressEvent("close", "started"), None
-    closure = verify_closure(truth.graph, ledger, settings.min_owner_distinct)
-    if not closure.ok:
+    closure = verify_closure(
+        truth.graph,
+        ledger,
+        settings.min_owner_distinct,
+        red_herrings=red_herrings,
+        dominance_margin=settings.dominance_margin,
+    )
+    if not closure.ok and closure.gaps and not closure.red_herring_gaps:
         # Remediation may have dropped a proposition below threshold; top it up
-        # with weak corroborators and re-check before failing.
+        # with weak corroborators and re-check before failing. Topping up also
+        # raises the truth's aggregate support, which only helps dominance.
         added, closure = top_up_closure(
             truth.graph,
             ledger,
             registry,
             settings.min_owner_distinct,
-            disclaimer=SYNTHETIC_EVIDENCE_DISCLAIMER,
+            disclaimer=disclaimer,
             base_time=_TOPUP_BASE_TIME,
         )
         artifacts.extend(added)
+        closure = verify_closure(
+            truth.graph,
+            ledger,
+            settings.min_owner_distinct,
+            red_herrings=red_herrings,
+            breaker_margin=settings.red_herring_breaker_margin,
+            dominance_margin=settings.dominance_margin,
+        )
     if not closure.ok:
         gap_payload = [
             {
@@ -166,7 +260,39 @@ async def run_pipeline(
             }
             for g in closure.gaps
         ]
-        yield ProgressEvent("close", "failed", {"gaps": gap_payload}), None
+        rh_gap_payload = [
+            {
+                "proposition_id": g.proposition_id,
+                "support_signal": g.support_signal,
+                "breaker_signal": g.breaker_signal,
+                "required_breaker_signal": g.required_breaker_signal,
+                "reason": g.reason,
+            }
+            for g in closure.red_herring_gaps
+        ]
+        dominance_gap_payload = [
+            {
+                "alternative_id": g.alternative_id,
+                "truth_support": g.truth_support,
+                "alternative_support": g.alternative_support,
+                "required_max_support": g.required_max_support,
+                "margin_shortfall": g.margin_shortfall,
+                "reason": g.reason,
+            }
+            for g in closure.dominance_gaps
+        ]
+        yield (
+            ProgressEvent(
+                "close",
+                "failed",
+                {
+                    "gaps": gap_payload,
+                    "red_herring_gaps": rh_gap_payload,
+                    "dominance_gaps": dominance_gap_payload,
+                },
+            ),
+            None,
+        )
         return
     yield ProgressEvent("close", "complete", {"propositions": len(truth.graph.propositions)}), None
 
@@ -181,8 +307,8 @@ async def run_pipeline(
         outline=truth.outline,
         timeline_start=timeline_start,
         timeline_end=timeline_end,
-        disclaimer=SYNTHETIC_EVIDENCE_DISCLAIMER,
-        target_count=settings.noise_target,
+        disclaimer=disclaimer,
+        target_count=settings.noise_count,
         max_count=settings.noise_max,
     )
     yield (
@@ -201,12 +327,13 @@ async def run_pipeline(
             artifacts=artifacts,
             ledger=ledger,
             registry=registry,
-            attestation_text=attestation.as_text(),
-            disclaimer=SYNTHETIC_EVIDENCE_DISCLAIMER,
+            attestation_text=case.attestation.as_text(),
+            disclaimer=disclaimer,
             run_id=run_id,
             remediation_log=[r.to_json_serialisable() for r in remediation_log],
             noise_artifacts=noise_artifacts,
             noise_summary=noise_summary.to_dict(),
+            red_herrings=red_herrings,
         )
     )
     assert_separation(zip_bytes)

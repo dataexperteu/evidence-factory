@@ -7,6 +7,7 @@ Layout:
   /SOLUTION/proposition_graph.json
   /SOLUTION/signal_ledger.json
   /SOLUTION/per_artifact_provenance.json
+  /SOLUTION/red_herring_breaker_map.json
 
 Invariant: nothing whose source is the SOLUTION pack may appear under /corpus.
 The zip writer enforces this by routing through `_corpus_member` /
@@ -26,7 +27,7 @@ from datetime import datetime
 
 from .persona_registry import PersonaRegistry
 from .signal_ledger import SignalLedger
-from .types import Artifact, CanonicalTruth
+from .types import Artifact, CanonicalTruth, RedHerring
 
 _SAFE = re.compile(r"[^a-zA-Z0-9._-]+")
 
@@ -50,6 +51,7 @@ class PackagerInput:
     # it appears only as aggregate counts in SOLUTION/noise_summary.json.
     noise_artifacts: list[Artifact] = field(default_factory=list)
     noise_summary: dict = field(default_factory=dict)
+    red_herrings: list[RedHerring] = field(default_factory=list)
 
 
 def _corpus_path(registry: PersonaRegistry, art: Artifact) -> str:
@@ -135,6 +137,10 @@ def build_zip(inp: PackagerInput) -> bytes:
             writer.writerow(row)
         zf.writestr("corpus/manifest.csv", csv_buf.getvalue())
 
+        # corpus/MANIFEST.txt — plain-text synthetic-evidence disclaimer that a
+        # reader sees without parsing any artifact's format-specific metadata.
+        zf.writestr("corpus/MANIFEST.txt", _manifest_txt(inp.disclaimer))
+
         # SOLUTION/ pack
         zf.writestr(
             "SOLUTION/truth_outline.md",
@@ -175,8 +181,50 @@ def build_zip(inp: PackagerInput) -> bytes:
             "SOLUTION/noise_summary.json",
             json.dumps({"run_id": inp.run_id, **inp.noise_summary}, indent=2),
         )
+        zf.writestr(
+            "SOLUTION/red_herring_breaker_map.json",
+            json.dumps(
+                {
+                    "run_id": inp.run_id,
+                    "red_herrings": [_red_herring_entry(rh) for rh in inp.red_herrings],
+                },
+                indent=2,
+            ),
+        )
 
     return buf.getvalue()
+
+
+def _manifest_txt(disclaimer: str) -> str:
+    return (
+        "SYNTHETIC EVIDENCE\n"
+        "==================\n\n"
+        f"{disclaimer}\n\n"
+        "Every artifact in this corpus is synthetic and carries the same "
+        "disclaimer stamped into a format-appropriate metadata field.\n"
+    )
+
+
+def _artifact_ref(art: Artifact) -> dict:
+    return {
+        "artifact_id": art.id,
+        "owner_id": art.owner_id,
+        "device_id": art.device_id,
+        "profile": art.profile,
+        "signal_weight": art.signal_weight,
+        "bound_proposition_ids": list(art.bound_proposition_ids),
+    }
+
+
+def _red_herring_entry(rh: RedHerring) -> dict:
+    return {
+        "proposition": {"id": rh.proposition.id, "text": rh.proposition.text},
+        "supporting_artifacts": [_artifact_ref(a) for a in rh.supporting],
+        "breaker_artifacts": [_artifact_ref(a) for a in rh.breakers],
+        "support_signal": rh.support_signal,
+        "breaker_signal": rh.breaker_signal,
+        "breaker_owner_count": len(rh.distinct_breaker_owners()),
+    }
 
 
 def assert_separation(zip_bytes: bytes) -> None:

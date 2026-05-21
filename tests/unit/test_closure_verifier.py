@@ -11,7 +11,12 @@ import pytest
 
 from api.pipeline.closure_verifier import ClosureFailure, verify_closure
 from api.pipeline.signal_ledger import SignalLedger
-from api.pipeline.types import Artifact, Proposition, PropositionGraph
+from api.pipeline.types import (
+    Artifact,
+    Proposition,
+    PropositionGraph,
+    RedHerring,
+)
 
 
 def _graph(*ids: str) -> PropositionGraph:
@@ -94,3 +99,179 @@ def test_closure_failure_message_summarises_gaps():
     result = verify_closure(graph, led, min_owner_distinct=2)
     err = ClosureFailure(result)
     assert "p1(0/2)" in str(err)
+
+
+# -- red-herring invariant (slice 9) ---------------------------------------
+
+
+def _weighted_art(art_id: str, owner: str, prop: str, weight: float) -> Artifact:
+    return Artifact(
+        id=art_id,
+        owner_id=owner,
+        device_id=f"d_{owner}",
+        profile="email",
+        filename=f"{art_id}.eml",
+        payload=b"",
+        sha256="0" * 64,
+        acquisition_time=datetime(2024, 1, 1, tzinfo=UTC),
+        bound_proposition_ids=(prop,),
+        signal_weight=weight,
+    )
+
+
+def _red_herring(*, support: float, breakers: list[tuple[str, float]]) -> RedHerring:
+    prop = Proposition(id="prop_rh", text="false lead")
+    supporting = (_weighted_art("rh_sup", "owner_s", "prop_rh", support),)
+    breaker_arts = tuple(
+        _weighted_art(f"rh_brk_{owner}", owner, "prop_rh", w) for owner, w in breakers
+    )
+    return RedHerring(proposition=prop, supporting=supporting, breakers=breaker_arts)
+
+
+def _full_ledger(graph: PropositionGraph) -> SignalLedger:
+    """A ledger where every true proposition is fully corroborated."""
+    led = SignalLedger()
+    for prop in graph.propositions:
+        for owner in ("o1", "o2"):
+            led.record(_art(f"a_{owner}_{prop.id}", owner, (prop.id,)))
+    return led
+
+
+def test_red_herring_passes_when_breakers_refute_by_margin():
+    graph = _graph("p1")
+    led = _full_ledger(graph)
+    rh = _red_herring(support=0.4, breakers=[("o_a", 0.45), ("o_b", 0.45)])
+    result = verify_closure(graph, led, min_owner_distinct=2, red_herrings=[rh], breaker_margin=0.5)
+    assert result.ok is True
+    assert result.red_herring_gaps == []
+
+
+def test_red_herring_rejected_when_breaker_aggregate_below_margin():
+    graph = _graph("p1")
+    led = _full_ledger(graph)
+    # support 0.6 -> required 0.9; breakers only sum to 0.7.
+    rh = _red_herring(support=0.6, breakers=[("o_a", 0.35), ("o_b", 0.35)])
+    result = verify_closure(graph, led, min_owner_distinct=2, red_herrings=[rh], breaker_margin=0.5)
+    assert result.ok is False
+    assert len(result.red_herring_gaps) == 1
+    gap = result.red_herring_gaps[0]
+    assert gap.proposition_id == "prop_rh"
+    assert gap.breaker_signal < gap.required_breaker_signal
+
+
+def test_red_herring_rejected_when_a_breaker_individually_convicts():
+    graph = _graph("p1")
+    led = _full_ledger(graph)
+    # Aggregate is fine, but one breaker is at/above the smoking-gun bar.
+    rh = _red_herring(support=0.4, breakers=[("o_a", 1.0), ("o_b", 0.45)])
+    result = verify_closure(graph, led, min_owner_distinct=2, red_herrings=[rh], breaker_margin=0.5)
+    assert result.ok is False
+    assert result.red_herring_gaps[0].individually_convicting_breaker_ids == ("rh_brk_o_a",)
+
+
+def test_red_herring_rejected_when_bundle_not_owner_distinct():
+    graph = _graph("p1")
+    led = _full_ledger(graph)
+    # Two breakers but both owned by the same custodian.
+    rh = _red_herring(support=0.4, breakers=[("o_a", 0.45), ("o_a", 0.45)])
+    result = verify_closure(graph, led, min_owner_distinct=2, red_herrings=[rh], breaker_margin=0.5)
+    assert result.ok is False
+    assert len(result.red_herring_gaps[0].distinct_breaker_owners) < 2
+
+
+def test_red_herring_margin_is_configurable():
+    graph = _graph("p1")
+    led = _full_ledger(graph)
+    rh = _red_herring(support=0.5, breakers=[("o_a", 0.45), ("o_b", 0.45)])  # aggregate 0.9
+    # margin 0.5 -> required 0.75 -> passes
+    assert verify_closure(
+        graph, led, min_owner_distinct=2, red_herrings=[rh], breaker_margin=0.5
+    ).ok
+    # margin 1.0 -> required 1.0 -> fails (0.9 < 1.0)
+    assert not verify_closure(
+        graph, led, min_owner_distinct=2, red_herrings=[rh], breaker_margin=1.0
+    ).ok
+
+
+# -- dominance invariant (slice 11) ----------------------------------------
+# `_full_ledger(_graph("p1"))` gives the true account an aggregate support of
+# 2.0 (two owner-distinct artifacts at weight 1.0). With dominance_margin 0.5
+# the ceiling a contested alternative must stay below is 2.0 * (1 - 0.5) = 1.0.
+
+
+def test_dominance_passes_when_alternative_is_weakly_supported():
+    graph = _graph("p1")
+    led = _full_ledger(graph)
+    rh = _red_herring(support=0.4, breakers=[("o_a", 0.45), ("o_b", 0.45)])
+    result = verify_closure(
+        graph,
+        led,
+        min_owner_distinct=2,
+        red_herrings=[rh],
+        breaker_margin=0.5,
+        dominance_margin=0.5,
+    )
+    assert result.ok is True
+    assert result.dominance_gaps == []
+
+
+def test_dominance_violation_when_alternative_rivals_truth_support():
+    graph = _graph("p1")
+    led = _full_ledger(graph)  # truth aggregate support = 2.0 -> ceiling 1.0
+    # Support 1.2 breaches the ceiling, yet the breaker bundle is fully valid
+    # (refutes by margin, owner-distinct, none individually convicts), so the
+    # failure is isolated to the dominance invariant.
+    rh = _red_herring(support=1.2, breakers=[("o_a", 0.7), ("o_b", 0.7), ("o_c", 0.7)])
+    result = verify_closure(
+        graph,
+        led,
+        min_owner_distinct=2,
+        red_herrings=[rh],
+        breaker_margin=0.5,
+        dominance_margin=0.5,
+    )
+    assert result.ok is False
+    assert result.gaps == []
+    assert result.red_herring_gaps == []
+    assert len(result.dominance_gaps) == 1
+    gap = result.dominance_gaps[0]
+    assert gap.alternative_id == "prop_rh"
+    assert gap.truth_support == 2.0
+    assert gap.alternative_support == 1.2
+    assert gap.required_max_support == 1.0
+    assert gap.margin_shortfall == pytest.approx(0.2)
+    assert "dominance margin" in gap.reason
+
+
+def test_dominance_margin_is_configurable():
+    graph = _graph("p1")
+    led = _full_ledger(graph)  # truth aggregate support = 2.0
+    rh = _red_herring(support=0.9, breakers=[("o_a", 0.7), ("o_b", 0.7), ("o_c", 0.7)])
+    # margin 0.5 -> ceiling 1.0 -> 0.9 <= 1.0 -> dominates
+    assert (
+        verify_closure(
+            graph,
+            led,
+            min_owner_distinct=2,
+            red_herrings=[rh],
+            breaker_margin=0.5,
+            dominance_margin=0.5,
+        ).dominance_gaps
+        == []
+    )
+    # margin 0.6 -> ceiling 0.8 -> 0.9 > 0.8 -> dominance violation
+    assert verify_closure(
+        graph,
+        led,
+        min_owner_distinct=2,
+        red_herrings=[rh],
+        breaker_margin=0.5,
+        dominance_margin=0.6,
+    ).dominance_gaps
+
+
+def test_dominance_margin_must_be_in_unit_interval():
+    with pytest.raises(ValueError):
+        verify_closure(_graph("p1"), SignalLedger(), min_owner_distinct=1, dominance_margin=1.0)
+    with pytest.raises(ValueError):
+        verify_closure(_graph("p1"), SignalLedger(), min_owner_distinct=1, dominance_margin=-0.1)
