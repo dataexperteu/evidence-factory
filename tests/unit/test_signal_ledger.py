@@ -66,7 +66,5 @@ def test_replace_entries_rebuilds_corroboration_but_keeps_critic_records():
     assert {e.artifact_id for e in led.entries()} == {"new"}
     assert led.distinct_owners_for("prop_1") == {"p_watson"}
     # Verdicts and remediation activity survive the rebuild.
-    assert led.critic_verdicts() == [
-        {"artifact_id": "old", "too_strong": True, "reason": "r"}
-    ]
+    assert led.critic_verdicts() == [{"artifact_id": "old", "too_strong": True, "reason": "r"}]
     assert led.remediations() == [{"flagged_artifact_id": "old", "strategy": "split"}]

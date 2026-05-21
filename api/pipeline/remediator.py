@@ -78,9 +78,7 @@ class _ParsedEmail:
 def _parse_email(payload: bytes) -> _ParsedEmail:
     msg = BytesParser(policy=default_policy).parsebytes(payload)
     sender_name, sender_address = parseaddr(str(msg["From"] or ""))
-    recipients = tuple(
-        (name, addr) for name, addr in getaddresses([str(msg["To"] or "")]) if addr
-    )
+    recipients = tuple((name, addr) for name, addr in getaddresses([str(msg["To"] or "")]) if addr)
     body = msg.get_content() if msg.get_content_type() == "text/plain" else str(msg.get_payload())
     return _ParsedEmail(
         sender_name=sender_name or "Unknown",

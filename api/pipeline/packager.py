@@ -140,9 +140,7 @@ def build_zip(inp: PackagerInput) -> bytes:
         )
         zf.writestr(
             "SOLUTION/remediation_log.json",
-            json.dumps(
-                {"run_id": inp.run_id, "remediations": inp.remediation_log}, indent=2
-            ),
+            json.dumps({"run_id": inp.run_id, "remediations": inp.remediation_log}, indent=2),
         )
 
     return buf.getvalue()
