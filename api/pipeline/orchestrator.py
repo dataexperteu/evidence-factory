@@ -17,7 +17,7 @@ import random
 import secrets
 from collections.abc import AsyncIterator
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from .artifact_emitter import emit_artifacts
 from .attestation import SYNTHETIC_EVIDENCE_DISCLAIMER, gate
@@ -25,6 +25,8 @@ from .closure_verifier import verify_closure
 from .critic import SmokingGunCritic
 from .event_graph import build_events
 from .llm_gateway import LLMGateway
+from .noise_generator import NoiseGenerator
+from .noise_guard import LeakContradictGuard
 from .packager import PackagerInput, assert_separation, build_zip
 from .persona_registry import default_registry
 from .remediation import run_critique_pass, top_up_closure
@@ -56,6 +58,7 @@ class RunResult:
     proposition_count: int
     cache_hits: int
     remediation_count: int = 0
+    noise_count: int = 0
 
 
 @dataclass
@@ -63,6 +66,8 @@ class RunSettings:
     min_owner_distinct: int = 2  # closure threshold; default keeps tests fast
     owners_per_proposition: int = 3  # > threshold so default runs pass closure
     max_propositions: int = 3
+    noise_target: int = 300  # PRD default haystack volume
+    noise_max: int = 1000  # PRD hard cap
 
 
 async def run_pipeline(
@@ -165,6 +170,30 @@ async def run_pipeline(
         return
     yield ProgressEvent("close", "complete", {"propositions": len(truth.graph.propositions)}), None
 
+    yield ProgressEvent("noise", "started"), None
+    noise_generator = NoiseGenerator(gateway, registry, LeakContradictGuard(gateway))
+    timeline_start = min((e.timestamp for e in events), default=_TOPUP_BASE_TIME)
+    timeline_end = max((e.timestamp for e in events), default=_TOPUP_BASE_TIME)
+    if timeline_end <= timeline_start:
+        timeline_end = timeline_start + timedelta(days=1)
+    noise_artifacts, noise_summary = noise_generator.generate(
+        propositions=[p.text for p in truth.graph.propositions],
+        outline=truth.outline,
+        timeline_start=timeline_start,
+        timeline_end=timeline_end,
+        disclaimer=SYNTHETIC_EVIDENCE_DISCLAIMER,
+        target_count=settings.noise_target,
+        max_count=settings.noise_max,
+    )
+    yield (
+        ProgressEvent(
+            "noise",
+            "complete",
+            {"generated": noise_summary.generated_count, "rejected": noise_summary.rejected_count},
+        ),
+        None,
+    )
+
     yield ProgressEvent("package", "started"), None
     zip_bytes = build_zip(
         PackagerInput(
@@ -176,6 +205,8 @@ async def run_pipeline(
             disclaimer=SYNTHETIC_EVIDENCE_DISCLAIMER,
             run_id=run_id,
             remediation_log=[r.to_json_serialisable() for r in remediation_log],
+            noise_artifacts=noise_artifacts,
+            noise_summary=noise_summary.to_dict(),
         )
     )
     assert_separation(zip_bytes)
@@ -188,6 +219,7 @@ async def run_pipeline(
         proposition_count=len(truth.graph.propositions),
         cache_hits=gateway.stats.hits,
         remediation_count=remediated,
+        noise_count=noise_summary.generated_count,
     )
     yield (
         ProgressEvent(

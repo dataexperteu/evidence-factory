@@ -11,6 +11,10 @@ from typing import Protocol, runtime_checkable
 
 @runtime_checkable
 class WrittenArtifact(Protocol):
-    filename: str
-    payload: bytes
-    sha256: str
+    # Read-only so the frozen per-profile result dataclasses satisfy the protocol.
+    @property
+    def filename(self) -> str: ...
+    @property
+    def payload(self) -> bytes: ...
+    @property
+    def sha256(self) -> str: ...
