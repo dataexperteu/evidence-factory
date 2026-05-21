@@ -102,6 +102,41 @@ merged with `Closes #N`), restarting `npm run go` skips that slice and lets
 its dependents proceed. A spine-slice failure halts the whole run; an apron
 failure only excludes its own slice.
 
+## CI gate & auto-merge
+
+Every push to `main` and every PR runs `.github/workflows/ci.yml`:
+a **python** job (`ruff check`, `mypy api`, `pytest`) and a **frontend** job
+(`npm run typecheck`, `npm run build` in `ui-app/`). Playwright e2e is *not* in
+CI — it needs live servers and is covered by the harness's Phase-2 UI-tester.
+
+The harness now **auto-merges**. When a slice lands and its UI-tester gate
+passes, `orchestrate.ts` calls `gh pr merge <branch> --auto --squash`; the PR
+then squash-merges **itself the moment CI goes green** — no human merge step.
+Issue-closing is automatic via the `Closes #N` line in the PR body.
+
+This needs two one-time repo settings (idempotent; run from the laptop with
+`$GH_TOKEN` exported). **Enable branch protection only after confirming `main`
+passes CI**, or auto-merge will wait forever on a check that can't go green:
+
+```bash
+# Allow auto-merge on the repo
+gh api -X PATCH repos/dataexperteu/evidence-factory -f allow_auto_merge=true
+
+# Require the CI checks on main (contexts must match the job names in ci.yml)
+gh api -X PUT repos/dataexperteu/evidence-factory/branches/main/protection \
+  -H "Accept: application/vnd.github+json" \
+  -f 'required_status_checks[strict]=true' \
+  -f 'required_status_checks[checks][][context]=Python (ruff + mypy + pytest)' \
+  -f 'required_status_checks[checks][][context]=Frontend (typecheck + build)' \
+  -F 'enforce_admins=false' \
+  -F 'required_pull_request_reviews=null' \
+  -F 'restrictions=null'
+```
+
+If auto-merge is not enabled on the repo (or branch protection is absent), the
+harness logs `! auto-merge not enabled …` and leaves the PR for a manual merge
+— the run does not fail.
+
 ## Locked decisions inherited from the canonical runbook
 
 Read these in `sandcastle-on-vm-runbook.md` §0 — do not relitigate here:

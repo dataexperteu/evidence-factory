@@ -172,6 +172,12 @@ const SLICES: Slice[] = [
   { issue: 12, key: "slice-10-noise-generator",     dependsOn: [3],      lane: "apron" },
   { issue: 13, key: "slice-11-dominance-watermark", dependsOn: [11],     lane: "spine" },
   { issue: 14, key: "slice-12-difficulty-presets",  dependsOn: [11, 12], lane: "apron" },
+  // Consolidation capstone (#33): port the noise generator + leak/contradict
+  // guard into api/ and delete the dead backend/ fork. Depends on all five new
+  // per-profile writers (#5–#9) landing in api/ first — noise writes through
+  // every profile, so it cannot run until they exist. Spine: carries the
+  // ≥95% leak-guard characterization test and a tree-wide deletion.
+  { issue: 33, key: "slice-13-consolidate-noise",   dependsOn: [5, 6, 7, 8, 9], lane: "spine" },
 ];
 
 const ready = (s: Slice, merged: Set<number>) =>
@@ -200,6 +206,19 @@ function prompt(s: Slice) {
     `slices may not yet have all of that scaffolding — follow the slice's own`,
     `acceptance criteria for which parts to build.`,
     ``,
+    `CANONICAL PROJECT STRUCTURE — read before writing any file:`,
+    `- The product lives in \`api/\` (FastAPI app + \`api/pipeline/\` + per-profile`,
+    `  modules under \`api/provenance/\`) and \`ui-app/\` (the SPA). EXTEND THIS TREE.`,
+    `- NEVER create a parallel top-level package (e.g. \`backend/\`, \`src/\`, a new`,
+    `  app root) and NEVER re-scaffold the project from scratch. If something you`,
+    `  need seems missing, it belongs IN \`api/\`/\`ui-app/\` — add it there.`,
+    `- A provenance profile is a per-profile module under \`api/provenance/\``,
+    `  (see \`api/provenance/email_profile.py\` for the established pattern), NOT a`,
+    `  branch in a monolithic catalog.`,
+    `- Before adding code, \`ls api/ api/pipeline/ api/provenance/\` and mirror the`,
+    `  existing conventions. If a top-level dir other than \`api/\`/\`ui-app/\`/\`tests/\``,
+    `  /\`docs/\` seems necessary, STOP — you have misread the structure.`,
+    ``,
     `Hard constraints:`,
     `- Honour AGENTS.md and the docs under docs/agents/ (index-based discovery,`,
     `  context maintenance, no stray root-level files).`,
@@ -221,9 +240,10 @@ function prompt(s: Slice) {
     `  2. \`cd ui-app && npx vite build\` exits 0 (if ui-app/ exists).`,
     `  3. The slice's own new/changed unit + golden/characterization tests pass.`,
     `Once those hold: commit on \`slice/${s.key}\`, open a PR linked to`,
-    `#${s.issue}, and STOP immediately — do not re-verify, do not poll CI.`,
-    `A separate UI-tester agent then validates this slice's UI; the human`,
-    `reviewer + CI gate the merge. This harness does NOT auto-merge.`,
+    `#${s.issue} (body must contain \`Closes #${s.issue}\`), and STOP immediately`,
+    `— do not re-verify, do not poll CI, do not merge. A separate UI-tester agent`,
+    `then validates this slice's UI; if it passes, the harness enables GitHub`,
+    `auto-merge (squash) and the PR merges itself once CI goes green.`,
   ].join("\n");
 }
 
@@ -254,6 +274,33 @@ function uiTestPrompt(s: Slice) {
     `   <test-result>FAIL: <what broke></test-result>`,
     `Do not touch production code; only add/adjust the e2e test.`,
   ].join("\n");
+}
+
+/**
+ * Enable GitHub auto-merge (squash) on the slice's PR once it has landed and
+ * the UI-tester gate passed. The agent already opened the PR (with `Closes #N`),
+ * so `gh` resolves it from the branch. `--auto` queues the squash-merge to fire
+ * only when branch protection's required checks (CI) go green — never merging
+ * red code. Defensive: a failure here (e.g. auto-merge not enabled on the repo
+ * yet, or no branch protection) is logged, not fatal — the PR simply waits for a
+ * human, exactly as before. Requires the repo setting "Allow auto-merge" ON and
+ * branch protection with a required status check; see the runbook.
+ */
+function enableAutoMerge(branch: string) {
+  try {
+    execFileSync(
+      "gh",
+      ["pr", "merge", branch, "--repo", REPO, "--auto", "--squash"],
+      { cwd: REPO_ROOT, stdio: "pipe", encoding: "utf8" },
+    );
+    console.log(`  ⏳ auto-merge (squash) enabled for ${branch} — fires when CI is green.`);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    console.error(
+      `  ! auto-merge not enabled for ${branch} (${msg.split("\n")[0]}). ` +
+        `PR left for manual merge — check repo "Allow auto-merge" + branch protection.`,
+    );
+  }
 }
 
 /** Reclaim the host worktree createSandbox() materialises. */
@@ -315,7 +362,8 @@ async function runSlice(s: Slice) {
       console.error(`  ✗ UI-tester FAILED #${s.issue}: ${verdict} — slice excluded.`);
       return { issue: s.issue, key: s.key, committed: false };
     }
-    // PASS or SKIPPED-NOT-UI → slice landed.
+    // PASS or SKIPPED-NOT-UI → slice landed. Queue the squash-merge; CI gates it.
+    enableAutoMerge(branch);
     return { issue: s.issue, key: s.key, committed: true };
   } finally {
     await sandbox.close();
