@@ -7,6 +7,7 @@ Layout:
   /SOLUTION/proposition_graph.json
   /SOLUTION/signal_ledger.json
   /SOLUTION/per_artifact_provenance.json
+  /SOLUTION/red_herring_breaker_map.json
 
 Invariant: nothing whose source is the SOLUTION pack may appear under /corpus.
 The zip writer enforces this by routing through `_corpus_member` /
@@ -26,7 +27,7 @@ from datetime import datetime
 
 from .persona_registry import PersonaRegistry
 from .signal_ledger import SignalLedger
-from .types import Artifact, CanonicalTruth
+from .types import Artifact, CanonicalTruth, RedHerring
 
 _SAFE = re.compile(r"[^a-zA-Z0-9._-]+")
 
@@ -45,6 +46,7 @@ class PackagerInput:
     disclaimer: str
     run_id: str
     remediation_log: list[dict] = field(default_factory=list)
+    red_herrings: list[RedHerring] = field(default_factory=list)
 
 
 def _corpus_path(registry: PersonaRegistry, art: Artifact) -> str:
@@ -142,8 +144,40 @@ def build_zip(inp: PackagerInput) -> bytes:
             "SOLUTION/remediation_log.json",
             json.dumps({"run_id": inp.run_id, "remediations": inp.remediation_log}, indent=2),
         )
+        zf.writestr(
+            "SOLUTION/red_herring_breaker_map.json",
+            json.dumps(
+                {
+                    "run_id": inp.run_id,
+                    "red_herrings": [_red_herring_entry(rh) for rh in inp.red_herrings],
+                },
+                indent=2,
+            ),
+        )
 
     return buf.getvalue()
+
+
+def _artifact_ref(art: Artifact) -> dict:
+    return {
+        "artifact_id": art.id,
+        "owner_id": art.owner_id,
+        "device_id": art.device_id,
+        "profile": art.profile,
+        "signal_weight": art.signal_weight,
+        "bound_proposition_ids": list(art.bound_proposition_ids),
+    }
+
+
+def _red_herring_entry(rh: RedHerring) -> dict:
+    return {
+        "proposition": {"id": rh.proposition.id, "text": rh.proposition.text},
+        "supporting_artifacts": [_artifact_ref(a) for a in rh.supporting],
+        "breaker_artifacts": [_artifact_ref(a) for a in rh.breakers],
+        "support_signal": rh.support_signal,
+        "breaker_signal": rh.breaker_signal,
+        "breaker_owner_count": len(rh.distinct_breaker_owners()),
+    }
 
 
 def assert_separation(zip_bytes: bytes) -> None:

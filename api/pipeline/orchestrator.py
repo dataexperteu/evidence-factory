@@ -27,6 +27,7 @@ from .event_graph import build_events
 from .llm_gateway import LLMGateway
 from .packager import PackagerInput, assert_separation, build_zip
 from .persona_registry import default_registry
+from .red_herring_designer import DesignerSettings, design_red_herrings
 from .remediation import run_critique_pass, top_up_closure
 from .remediator import RandomStrategySelector
 from .signal_ledger import SignalLedger
@@ -34,6 +35,7 @@ from .source_intake import ingest_paste
 from .truth_extractor import extract_truth
 
 _TOPUP_BASE_TIME = datetime(2024, 6, 10, 9, 0, 0, tzinfo=UTC)
+_REDHERRING_BASE_TIME = datetime(2024, 6, 20, 9, 0, 0, tzinfo=UTC)
 
 LOG = logging.getLogger("evidence_factory.orchestrator")
 
@@ -63,6 +65,7 @@ class RunSettings:
     min_owner_distinct: int = 2  # closure threshold; default keeps tests fast
     owners_per_proposition: int = 3  # > threshold so default runs pass closure
     max_propositions: int = 3
+    red_herring_breaker_margin: float = 0.5  # breaker bundle must exceed support by this
 
 
 async def run_pipeline(
@@ -137,9 +140,42 @@ async def run_pipeline(
         None,
     )
 
+    yield ProgressEvent("redherring", "started"), None
+    red_herrings, rh_artifacts = design_red_herrings(
+        truth,
+        registry,
+        critic=critic,
+        disclaimer=SYNTHETIC_EVIDENCE_DISCLAIMER,
+        base_time=_REDHERRING_BASE_TIME,
+        scheduled=ledger.scheduled_red_herrings(),
+        existing_artifacts=artifacts,
+        ledger=ledger,
+        settings=DesignerSettings(breaker_margin=settings.red_herring_breaker_margin),
+    )
+    for art in rh_artifacts:
+        ledger.record(art)
+        artifacts.append(art)
+    yield (
+        ProgressEvent(
+            "redherring",
+            "complete",
+            {
+                "red_herrings": len(red_herrings),
+                "breaker_artifacts": sum(len(r.breakers) for r in red_herrings),
+            },
+        ),
+        None,
+    )
+
     yield ProgressEvent("close", "started"), None
-    closure = verify_closure(truth.graph, ledger, settings.min_owner_distinct)
-    if not closure.ok:
+    closure = verify_closure(
+        truth.graph,
+        ledger,
+        settings.min_owner_distinct,
+        red_herrings=red_herrings,
+        breaker_margin=settings.red_herring_breaker_margin,
+    )
+    if not closure.ok and closure.gaps and not closure.red_herring_gaps:
         # Remediation may have dropped a proposition below threshold; top it up
         # with weak corroborators and re-check before failing.
         added, closure = top_up_closure(
@@ -151,6 +187,13 @@ async def run_pipeline(
             base_time=_TOPUP_BASE_TIME,
         )
         artifacts.extend(added)
+        closure = verify_closure(
+            truth.graph,
+            ledger,
+            settings.min_owner_distinct,
+            red_herrings=red_herrings,
+            breaker_margin=settings.red_herring_breaker_margin,
+        )
     if not closure.ok:
         gap_payload = [
             {
@@ -161,7 +204,22 @@ async def run_pipeline(
             }
             for g in closure.gaps
         ]
-        yield ProgressEvent("close", "failed", {"gaps": gap_payload}), None
+        rh_gap_payload = [
+            {
+                "proposition_id": g.proposition_id,
+                "support_signal": g.support_signal,
+                "breaker_signal": g.breaker_signal,
+                "required_breaker_signal": g.required_breaker_signal,
+                "reason": g.reason,
+            }
+            for g in closure.red_herring_gaps
+        ]
+        yield (
+            ProgressEvent(
+                "close", "failed", {"gaps": gap_payload, "red_herring_gaps": rh_gap_payload}
+            ),
+            None,
+        )
         return
     yield ProgressEvent("close", "complete", {"propositions": len(truth.graph.propositions)}), None
 
@@ -176,6 +234,7 @@ async def run_pipeline(
             disclaimer=SYNTHETIC_EVIDENCE_DISCLAIMER,
             run_id=run_id,
             remediation_log=[r.to_json_serialisable() for r in remediation_log],
+            red_herrings=red_herrings,
         )
     )
     assert_separation(zip_bytes)

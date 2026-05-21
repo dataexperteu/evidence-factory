@@ -252,7 +252,9 @@ def test_smoke_solution_pack_records_remediation_activity():
 
     records = remediation["remediations"]
     assert records, "expected at least one artifact to be flagged and remediated"
-    assert all(r["strategy"] in ("split", "dilute", "none") for r in records)
+    assert all(
+        r["strategy"] in ("split", "dilute", "redact_relocate", "demote", "none") for r in records
+    )
     assert any(r["outcome"] == "remediated" for r in records)
 
     # Every flagged-and-remediated artifact names the products it produced.
@@ -266,6 +268,30 @@ def test_smoke_solution_pack_records_remediation_activity():
     assert any(v["too_strong"] for v in verdicts)
     # Remediation activity is mirrored on the ledger too.
     assert ledger["remediations"]
+
+
+def test_smoke_solution_pack_has_red_herring_breaker_map():
+    """Slice 9: the sealed pack ships red_herring_breaker_map.json with at least
+    one red herring whose breaker bundle is non-empty, owner-distinct (>= 2), and
+    refutes the red herring in aggregate without any breaker convicting alone."""
+    zip_bytes = _run()
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        names = zf.namelist()
+        assert "SOLUTION/red_herring_breaker_map.json" in names
+        rh_map = json.loads(zf.read("SOLUTION/red_herring_breaker_map.json"))
+
+    red_herrings = rh_map["red_herrings"]
+    assert red_herrings, "expected at least one red herring per generated case"
+    for rh in red_herrings:
+        assert rh["supporting_artifacts"], "red herring must have >= 1 supporting artifact"
+        breakers = rh["breaker_artifacts"]
+        assert len(breakers) >= 2, "breaker bundle must have >= 2 artifacts"
+        owners = {b["owner_id"] for b in breakers}
+        assert len(owners) >= 2, "breaker bundle must be owner-distinct"
+        # Aggregate refutation: breaker signal exceeds support by the margin.
+        assert rh["breaker_signal"] >= rh["support_signal"] * 1.5
+        # No single breaker convicts on its own (below the smoking-gun bar of 1.0).
+        assert all(b["signal_weight"] < 1.0 for b in breakers)
 
 
 def test_smoke_two_runs_produce_different_corpora():

@@ -21,7 +21,13 @@ from ..provenance.email_profile import EmailBrief, write_email
 from .closure_verifier import verify_closure
 from .critic import SmokingGunCritic
 from .persona_registry import PersonaRegistry
-from .remediator import DILUTE_FACTOR, StrategySelector, remediate
+from .remediator import (
+    DILUTE_FACTOR,
+    StrategySelector,
+    demote,
+    false_proposition_id_for,
+    remediate,
+)
 from .signal_ledger import SignalLedger
 from .types import Artifact, CanonicalTruth, ClosureResult, PropositionGraph
 
@@ -97,7 +103,28 @@ def run_critique_pass(
             continue
 
         strategy = selector.choose(artifact)
-        products = remediate(artifact, strategy, registry, disclaimer=disclaimer)
+        # split / dilute / redact_relocate / demote are email-shaped transforms;
+        # other profiles pass through unchanged (re-critiqued until the cap).
+        if artifact.profile != "email":
+            products = [artifact]
+        elif strategy == "demote":
+            result = demote(
+                artifact,
+                registry,
+                disclaimer=disclaimer,
+                false_proposition_id=false_proposition_id_for(artifact),
+            )
+            products = [result.red_herring_support, result.true_signal]
+            ledger.record_red_herring_schedule(
+                {
+                    "proposition_id": result.false_proposition.id,
+                    "proposition_text": result.false_proposition.text,
+                    "support_artifact_ids": [result.red_herring_support.id],
+                    "origin_artifact_id": artifact.id,
+                }
+            )
+        else:
+            products = remediate(artifact, strategy, registry, disclaimer=disclaimer)
         record = RemediationRecord(
             flagged_artifact_id=artifact.id,
             reason=verdict.reason,
