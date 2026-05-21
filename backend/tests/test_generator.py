@@ -129,10 +129,11 @@ def test_default_target_is_300(
 
 
 def _multi_profile_batches(registry: PersonaRegistry) -> list[list[dict[str, Any]]]:
-    """One batch per profile, cycling through all 6."""
+    """One batch per profile, cycling through all profiles."""
     triples_by_profile = {
         ArtifactProfile.EMAIL: ("alice", "alice_laptop"),
         ArtifactProfile.SMS: ("alice", "alice_phone"),
+        ArtifactProfile.SMS_CHAT_EXPORT: ("alice", "alice_phone"),
         ArtifactProfile.PDF: ("alice", "alice_laptop"),
         ArtifactProfile.XLSX: ("alice", "alice_laptop"),
         ArtifactProfile.JPEG: ("alice", "alice_phone"),
@@ -147,7 +148,7 @@ def _multi_profile_batches(registry: PersonaRegistry) -> list[list[dict[str, Any
     return batches
 
 
-def test_all_six_profiles_represented(
+def test_all_profiles_represented(
     mocker: MockerFixture, bible: CaseBible, registry: PersonaRegistry
 ) -> None:
     batches = _multi_profile_batches(registry)

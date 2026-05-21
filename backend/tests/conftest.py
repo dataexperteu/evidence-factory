@@ -41,7 +41,11 @@ def personas() -> list[Persona]:
                 Device(
                     device_id="alice_phone",
                     owner="alice",
-                    permitted_profiles={ArtifactProfile.SMS, ArtifactProfile.JPEG},
+                    permitted_profiles={
+                        ArtifactProfile.SMS,
+                        ArtifactProfile.SMS_CHAT_EXPORT,
+                        ArtifactProfile.JPEG,
+                    },
                 ),
             ],
         ),
@@ -61,7 +65,11 @@ def personas() -> list[Persona]:
                 Device(
                     device_id="bob_phone",
                     owner="bob",
-                    permitted_profiles={ArtifactProfile.SMS, ArtifactProfile.JPEG},
+                    permitted_profiles={
+                        ArtifactProfile.SMS,
+                        ArtifactProfile.SMS_CHAT_EXPORT,
+                        ArtifactProfile.JPEG,
+                    },
                 ),
             ],
         ),

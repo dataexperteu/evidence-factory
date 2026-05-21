@@ -6,6 +6,9 @@ from email.message import EmailMessage
 from typing import Any
 
 from ..models import ArtifactProfile
+from .sms_profile import SmsChatExportWriter
+
+_sms_chat_writer = SmsChatExportWriter()
 
 
 def _pdf_bytes(text: str, author: str, created: str) -> bytes:
@@ -60,6 +63,7 @@ class ProvenanceCatalog:
         dispatch = {
             ArtifactProfile.EMAIL: self._write_email,
             ArtifactProfile.SMS: self._write_sms,
+            ArtifactProfile.SMS_CHAT_EXPORT: self._write_sms_chat_export,
             ArtifactProfile.PDF: self._write_pdf,
             ArtifactProfile.XLSX: self._write_xlsx,
             ArtifactProfile.JPEG: self._write_jpeg,
@@ -99,6 +103,13 @@ class ProvenanceCatalog:
             if line.strip():
                 writer.writerow([ts, sender, recipient, line])
         return buf.getvalue().encode("utf-8")
+
+    # ------------------------------------------------------------------
+    # SMS / chat thread export (CSV or SQLite — sms_chat_export profile)
+    # ------------------------------------------------------------------
+
+    def _write_sms_chat_export(self, text_content: str, metadata: dict[str, Any]) -> bytes:
+        return _sms_chat_writer.write(text_content, metadata)
 
     # ------------------------------------------------------------------
     # PDF document (stdlib — no reportlab dependency)

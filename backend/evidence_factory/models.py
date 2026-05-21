@@ -10,6 +10,7 @@ from typing import Any
 class ArtifactProfile(StrEnum):
     EMAIL = "email"
     SMS = "sms"
+    SMS_CHAT_EXPORT = "sms_chat_export"
     PDF = "pdf"
     XLSX = "xlsx"
     JPEG = "jpeg"

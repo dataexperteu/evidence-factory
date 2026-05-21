@@ -31,6 +31,7 @@ from evidence_factory.registry import PersonaRegistry
 _PROFILE_DEVICE_MAP = {
     ArtifactProfile.EMAIL: ("alice", "alice_laptop"),
     ArtifactProfile.SMS: ("alice", "alice_phone"),
+    ArtifactProfile.SMS_CHAT_EXPORT: ("alice", "alice_phone"),
     ArtifactProfile.PDF: ("alice", "alice_laptop"),
     ArtifactProfile.XLSX: ("alice", "alice_laptop"),
     ArtifactProfile.JPEG: ("alice", "alice_phone"),
@@ -55,7 +56,7 @@ def _make_item(profile: ArtifactProfile, idx: int) -> dict[str, Any]:
 
 
 def _build_smoke_generator(mocker: MockerFixture, registry: PersonaRegistry) -> NoiseGenerator:
-    """Build NoiseGenerator with a mocked LLM that cycles through all 6 profiles."""
+    """Build NoiseGenerator with a mocked LLM that cycles through all profiles."""
     call_counter: list[int] = [0]
     profiles = list(ArtifactProfile)
 
@@ -141,10 +142,10 @@ def test_smoke_default_noise_volume(
     assert summary.cache_hits >= 1
 
 
-def test_smoke_all_six_profiles_appear(
+def test_smoke_all_profiles_appear(
     mocker: MockerFixture, bible: CaseBible, registry: PersonaRegistry
 ) -> None:
-    """At default volume, every one of the six profiles must be present."""
+    """At default volume, every profile must be present."""
     gen = _build_smoke_generator(mocker, registry)
     artifacts, summary = gen.generate(bible)
     profiles_used = {a.profile for a in artifacts}
