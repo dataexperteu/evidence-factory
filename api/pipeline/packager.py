@@ -46,6 +46,11 @@ class PackagerInput:
     disclaimer: str
     run_id: str
     remediation_log: list[dict] = field(default_factory=list)
+    # Haystack noise: written into /corpus + manifest only. Noise carries no
+    # bound propositions and is never enumerated in the ledger or provenance —
+    # it appears only as aggregate counts in SOLUTION/noise_summary.json.
+    noise_artifacts: list[Artifact] = field(default_factory=list)
+    noise_summary: dict = field(default_factory=dict)
     red_herrings: list[RedHerring] = field(default_factory=list)
 
 
@@ -93,6 +98,30 @@ def build_zip(inp: PackagerInput) -> bytes:
                     "proposition_ids": list(art.bound_proposition_ids),
                     "signal_weight": art.signal_weight,
                     "synthetic_evidence_disclaimer": inp.disclaimer,
+                }
+            )
+
+        # Haystack noise — corpus files + manifest entries only (no provenance,
+        # no ledger). These bury the load-bearing artifacts.
+        for art in inp.noise_artifacts:
+            path = _corpus_path(inp.registry, art)
+            if path in seen_corpus_paths:
+                raise ValueError(f"corpus path collision: {path}")
+            seen_corpus_paths.add(path)
+            zf.writestr(path, art.payload)
+            verify = hashlib.sha256(art.payload).hexdigest()
+            if verify != art.sha256:
+                raise ValueError(
+                    f"noise artifact {art.id} sha256 mismatch "
+                    f"(recorded {art.sha256} vs actual {verify})"
+                )
+            manifest_rows.append(
+                {
+                    "acquisition_time": art.acquisition_time.isoformat(),
+                    "owner": inp.registry.get_actor_display_name(art.owner_id),
+                    "device": inp.registry.get_device(art.device_id).label,
+                    "path": path,
+                    "sha256": art.sha256,
                 }
             )
 
@@ -147,6 +176,10 @@ def build_zip(inp: PackagerInput) -> bytes:
         zf.writestr(
             "SOLUTION/remediation_log.json",
             json.dumps({"run_id": inp.run_id, "remediations": inp.remediation_log}, indent=2),
+        )
+        zf.writestr(
+            "SOLUTION/noise_summary.json",
+            json.dumps({"run_id": inp.run_id, **inp.noise_summary}, indent=2),
         )
         zf.writestr(
             "SOLUTION/red_herring_breaker_map.json",

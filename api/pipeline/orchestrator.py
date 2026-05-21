@@ -17,7 +17,7 @@ import random
 import secrets
 from collections.abc import AsyncIterator
 from dataclasses import asdict, dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from .artifact_emitter import emit_artifacts
@@ -26,6 +26,8 @@ from .closure_verifier import verify_closure
 from .critic import SmokingGunCritic
 from .event_graph import build_events
 from .llm_gateway import LLMGateway
+from .noise_generator import NoiseGenerator
+from .noise_guard import LeakContradictGuard
 from .packager import PackagerInput, assert_separation, build_zip
 from .persona_registry import default_registry
 from .red_herring_designer import DesignerSettings, design_red_herrings
@@ -59,6 +61,7 @@ class RunResult:
     proposition_count: int
     cache_hits: int
     remediation_count: int = 0
+    noise_count: int = 0
 
 
 DifficultyPreset = Literal["easy", "medium", "hard"]
@@ -105,6 +108,7 @@ class RunSettings:
     target_artifact_count: int = 400  # total corpus size target (used by noise generator)
     red_herring_count: int = 3  # number of red-herring artifacts to inject
     noise_count: int = 350  # number of Haiku-generated haystack noise artifacts
+    noise_max: int = 1000  # PRD hard cap on haystack volume
 
 
 def settings_for_preset(preset: DifficultyPreset) -> RunSettings:
@@ -292,6 +296,30 @@ async def run_pipeline(
         return
     yield ProgressEvent("close", "complete", {"propositions": len(truth.graph.propositions)}), None
 
+    yield ProgressEvent("noise", "started"), None
+    noise_generator = NoiseGenerator(gateway, registry, LeakContradictGuard(gateway))
+    timeline_start = min((e.timestamp for e in events), default=_TOPUP_BASE_TIME)
+    timeline_end = max((e.timestamp for e in events), default=_TOPUP_BASE_TIME)
+    if timeline_end <= timeline_start:
+        timeline_end = timeline_start + timedelta(days=1)
+    noise_artifacts, noise_summary = noise_generator.generate(
+        propositions=[p.text for p in truth.graph.propositions],
+        outline=truth.outline,
+        timeline_start=timeline_start,
+        timeline_end=timeline_end,
+        disclaimer=disclaimer,
+        target_count=settings.noise_count,
+        max_count=settings.noise_max,
+    )
+    yield (
+        ProgressEvent(
+            "noise",
+            "complete",
+            {"generated": noise_summary.generated_count, "rejected": noise_summary.rejected_count},
+        ),
+        None,
+    )
+
     yield ProgressEvent("package", "started"), None
     zip_bytes = build_zip(
         PackagerInput(
@@ -303,6 +331,8 @@ async def run_pipeline(
             disclaimer=disclaimer,
             run_id=run_id,
             remediation_log=[r.to_json_serialisable() for r in remediation_log],
+            noise_artifacts=noise_artifacts,
+            noise_summary=noise_summary.to_dict(),
             red_herrings=red_herrings,
         )
     )
@@ -316,6 +346,7 @@ async def run_pipeline(
         proposition_count=len(truth.graph.propositions),
         cache_hits=gateway.stats.hits,
         remediation_count=remediated,
+        noise_count=noise_summary.generated_count,
     )
     yield (
         ProgressEvent(

@@ -97,6 +97,31 @@ class ClosureResult:
 
 
 @dataclass(frozen=True)
+class NoiseSummary:
+    """Aggregate counts for the haystack noise generation pass.
+
+    Noise artifacts carry no bound propositions and are never recorded in the
+    Signal Ledger; this summary is the only place noise is reported, as counts."""
+
+    target_count: int
+    generated_count: int
+    rejected_count: int
+    profile_distribution: dict[str, int]
+    cache_hits: int
+    cache_misses: int
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "target_count": self.target_count,
+            "generated_count": self.generated_count,
+            "rejected_count": self.rejected_count,
+            "profile_distribution": self.profile_distribution,
+            "cache_hits": self.cache_hits,
+            "cache_misses": self.cache_misses,
+        }
+
+
+@dataclass(frozen=True)
 class ClosureGap:
     proposition_id: str
     required: int
