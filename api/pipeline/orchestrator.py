@@ -18,6 +18,7 @@ import secrets
 from collections.abc import AsyncIterator
 from dataclasses import asdict, dataclass, field
 from datetime import UTC, datetime
+from typing import Literal
 
 from .artifact_emitter import emit_artifacts
 from .attestation import gate
@@ -60,13 +61,59 @@ class RunResult:
     remediation_count: int = 0
 
 
+DifficultyPreset = Literal["easy", "medium", "hard"]
+
+_PRESET_VALUES: dict[str, dict] = {
+    "easy": dict(
+        min_owner_distinct=2,
+        owners_per_proposition=2,
+        fragmentation_factor=2,
+        dominance_margin=0.5,
+        target_artifact_count=100,
+        red_herring_count=1,
+        noise_count=80,
+    ),
+    "medium": dict(
+        min_owner_distinct=3,
+        owners_per_proposition=3,
+        fragmentation_factor=3,
+        dominance_margin=0.3,
+        target_artifact_count=400,
+        red_herring_count=3,
+        noise_count=350,
+    ),
+    "hard": dict(
+        min_owner_distinct=5,
+        owners_per_proposition=5,
+        fragmentation_factor=5,
+        dominance_margin=0.15,
+        target_artifact_count=1000,
+        red_herring_count=6,
+        noise_count=950,
+    ),
+}
+
+
 @dataclass
 class RunSettings:
     min_owner_distinct: int = 2  # closure threshold; default keeps tests fast
     owners_per_proposition: int = 3  # > threshold so default runs pass closure
     max_propositions: int = 3
     red_herring_breaker_margin: float = 0.5  # breaker bundle must exceed support by this
-    dominance_margin: float = 0.5  # truth must out-support every alternative by this fraction
+    fragmentation_factor: int = 3  # mean artifact fragments per split remediation
+    dominance_margin: float = 0.3  # truth's lead over best alternative
+    target_artifact_count: int = 400  # total corpus size target (used by noise generator)
+    red_herring_count: int = 3  # number of red-herring artifacts to inject
+    noise_count: int = 350  # number of Haiku-generated haystack noise artifacts
+
+
+def settings_for_preset(preset: DifficultyPreset) -> RunSettings:
+    """Return a RunSettings configured for the given difficulty preset."""
+    if preset not in _PRESET_VALUES:
+        raise ValueError(
+            f"unknown difficulty preset: {preset!r}; expected one of {list(_PRESET_VALUES)}"
+        )
+    return RunSettings(**_PRESET_VALUES[preset])
 
 
 async def run_pipeline(
@@ -130,6 +177,7 @@ async def run_pipeline(
         selector=selector,
         ledger=ledger,
         disclaimer=disclaimer,
+        fragmentation_factor=settings.fragmentation_factor,
     )
     remediated = sum(1 for r in remediation_log if r.outcome == "remediated")
     unresolved = sum(1 for r in remediation_log if r.outcome == "failed_after_retries")
@@ -152,7 +200,7 @@ async def run_pipeline(
         scheduled=ledger.scheduled_red_herrings(),
         existing_artifacts=artifacts,
         ledger=ledger,
-        settings=DesignerSettings(breaker_margin=settings.red_herring_breaker_margin),
+        settings=DesignerSettings(min_red_herrings=settings.red_herring_count),
     )
     for art in rh_artifacts:
         ledger.record(art)
@@ -175,7 +223,6 @@ async def run_pipeline(
         ledger,
         settings.min_owner_distinct,
         red_herrings=red_herrings,
-        breaker_margin=settings.red_herring_breaker_margin,
         dominance_margin=settings.dominance_margin,
     )
     if not closure.ok and closure.gaps and not closure.red_herring_gaps:

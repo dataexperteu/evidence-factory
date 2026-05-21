@@ -1,6 +1,64 @@
 import { useEffect, useRef, useState } from "react";
 
 type IntakeMode = "paste" | "url" | "upload";
+type DifficultyPreset = "easy" | "medium" | "hard";
+
+type Dials = {
+  owners_per_proposition: number;
+  min_owner_distinct: number;
+  fragmentation_factor: number;
+  dominance_margin: number;
+  target_artifact_count: number;
+  red_herring_count: number;
+  noise_count: number;
+};
+
+const PRESET_DIALS: Record<DifficultyPreset, Dials> = {
+  easy: {
+    owners_per_proposition: 2,
+    min_owner_distinct: 2,
+    fragmentation_factor: 2,
+    dominance_margin: 0.5,
+    target_artifact_count: 100,
+    red_herring_count: 1,
+    noise_count: 80,
+  },
+  medium: {
+    owners_per_proposition: 3,
+    min_owner_distinct: 3,
+    fragmentation_factor: 3,
+    dominance_margin: 0.3,
+    target_artifact_count: 400,
+    red_herring_count: 3,
+    noise_count: 350,
+  },
+  hard: {
+    owners_per_proposition: 5,
+    min_owner_distinct: 5,
+    fragmentation_factor: 5,
+    dominance_margin: 0.15,
+    target_artifact_count: 1000,
+    red_herring_count: 6,
+    noise_count: 950,
+  },
+};
+
+function dialMatchesPreset(dials: Dials): DifficultyPreset | null {
+  for (const [preset, values] of Object.entries(PRESET_DIALS) as [DifficultyPreset, Dials][]) {
+    if (
+      dials.owners_per_proposition === values.owners_per_proposition &&
+      dials.min_owner_distinct === values.min_owner_distinct &&
+      dials.fragmentation_factor === values.fragmentation_factor &&
+      Math.abs(dials.dominance_margin - values.dominance_margin) < 1e-9 &&
+      dials.target_artifact_count === values.target_artifact_count &&
+      dials.red_herring_count === values.red_herring_count &&
+      dials.noise_count === values.noise_count
+    ) {
+      return preset;
+    }
+  }
+  return null;
+}
 
 type StageEvent = {
   stage: string;
@@ -24,6 +82,9 @@ export function App() {
 
   // Upload mode state
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+
+  // Difficulty dials (default = medium preset)
+  const [dials, setDials] = useState<Dials>({ ...PRESET_DIALS.medium });
 
   // Shared state
   const [attested, setAttested] = useState(false);
@@ -109,19 +170,31 @@ export function App() {
     resetRun();
     setError(null);
 
+    const activePreset = dialMatchesPreset(dials);
+
     let resp: Response;
     try {
       if (mode === "paste") {
         resp = await fetch("/api/runs", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ source_paste: paste, attestation_checked: attested }),
+          body: JSON.stringify({
+            source_paste: paste,
+            attestation_checked: attested,
+            difficulty: activePreset ?? "medium",
+            ...dials,
+          }),
         });
       } else if (mode === "url") {
         resp = await fetch("/api/runs", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ source_url: url.trim(), attestation_checked: attested }),
+          body: JSON.stringify({
+            source_url: url.trim(),
+            attestation_checked: attested,
+            difficulty: activePreset ?? "medium",
+            ...dials,
+          }),
         });
       } else {
         const fd = new FormData();
@@ -252,6 +325,137 @@ export function App() {
           )}
         </div>
       )}
+
+      {/* Difficulty preset selector */}
+      <div className="difficulty-section">
+        <div className="preset-selector" role="group" aria-label="Difficulty preset">
+          {(["easy", "medium", "hard"] as DifficultyPreset[]).map((preset) => {
+            const active = dialMatchesPreset(dials) === preset;
+            return (
+              <button
+                key={preset}
+                data-testid={`preset-${preset}`}
+                className={`preset-btn${active ? " active" : ""}`}
+                aria-pressed={active}
+                disabled={submitting}
+                onClick={() => setDials({ ...PRESET_DIALS[preset] })}
+              >
+                {preset.charAt(0).toUpperCase() + preset.slice(1)}
+              </button>
+            );
+          })}
+          {dialMatchesPreset(dials) === null && (
+            <span className="preset-custom" data-testid="preset-custom">
+              Custom
+            </span>
+          )}
+        </div>
+
+        <details data-testid="advanced-dials">
+          <summary data-testid="advanced-dials-summary">Advanced settings</summary>
+          <div className="dials-grid">
+            <label>
+              Corroborators per proposition
+              <input
+                type="number"
+                data-testid="dial-owners-per-proposition"
+                min={1}
+                max={6}
+                value={dials.owners_per_proposition}
+                disabled={submitting}
+                onChange={(e) =>
+                  setDials((d) => ({ ...d, owners_per_proposition: Number(e.target.value) }))
+                }
+              />
+            </label>
+            <label>
+              Closure lower bound
+              <input
+                type="number"
+                data-testid="dial-min-owner-distinct"
+                min={1}
+                max={6}
+                value={dials.min_owner_distinct}
+                disabled={submitting}
+                onChange={(e) =>
+                  setDials((d) => ({ ...d, min_owner_distinct: Number(e.target.value) }))
+                }
+              />
+            </label>
+            <label>
+              Fragmentation factor
+              <input
+                type="number"
+                data-testid="dial-fragmentation-factor"
+                min={1}
+                max={10}
+                value={dials.fragmentation_factor}
+                disabled={submitting}
+                onChange={(e) =>
+                  setDials((d) => ({ ...d, fragmentation_factor: Number(e.target.value) }))
+                }
+              />
+            </label>
+            <label>
+              Dominance margin
+              <input
+                type="number"
+                data-testid="dial-dominance-margin"
+                min={0.05}
+                max={1.0}
+                step={0.05}
+                value={dials.dominance_margin}
+                disabled={submitting}
+                onChange={(e) =>
+                  setDials((d) => ({ ...d, dominance_margin: Number(e.target.value) }))
+                }
+              />
+            </label>
+            <label>
+              Target artifact count
+              <input
+                type="number"
+                data-testid="dial-target-artifact-count"
+                min={10}
+                max={2000}
+                value={dials.target_artifact_count}
+                disabled={submitting}
+                onChange={(e) =>
+                  setDials((d) => ({ ...d, target_artifact_count: Number(e.target.value) }))
+                }
+              />
+            </label>
+            <label>
+              Red-herring count
+              <input
+                type="number"
+                data-testid="dial-red-herring-count"
+                min={0}
+                max={20}
+                value={dials.red_herring_count}
+                disabled={submitting}
+                onChange={(e) =>
+                  setDials((d) => ({ ...d, red_herring_count: Number(e.target.value) }))
+                }
+              />
+            </label>
+            <label>
+              Noise count
+              <input
+                type="number"
+                data-testid="dial-noise-count"
+                min={0}
+                max={2000}
+                value={dials.noise_count}
+                disabled={submitting}
+                onChange={(e) =>
+                  setDials((d) => ({ ...d, noise_count: Number(e.target.value) }))
+                }
+              />
+            </label>
+          </div>
+        </details>
+      </div>
 
       {/* Attestation + Generate */}
       <div className="row">
