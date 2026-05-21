@@ -1,9 +1,10 @@
-"""Golden-file structural validity tests for all six Provenance Catalog profiles."""
+"""Golden-file structural validity tests for all Provenance Catalog profiles."""
 
 from __future__ import annotations
 
 import csv
 import email.parser
+import hashlib
 import io
 
 import pytest
@@ -161,6 +162,102 @@ def test_xlsx_has_data_rows(catalog: ProvenanceCatalog) -> None:
     rows = list(ws.iter_rows(values_only=True))
     # Header row + data rows
     assert len(rows) >= 2
+
+
+# ---------------------------------------------------------------------------
+# XLSX ledger — full metadata + typed columns + SHA-256 stability
+# ---------------------------------------------------------------------------
+
+_LEDGER_CSV = (
+    "date,description,amount,category\n"
+    "2024-01-15,Rent payment,1200.00,Housing\n"
+    "2024-01-16,Utilities,89.50,Utilities\n"
+    "2024-01-20,Office supplies,45,Expenses\n"
+)
+_LEDGER_META = {
+    "creator": "Alice Smith",
+    "created": "2024-01-15 09:00:00",
+    "modified": "2024-01-15 09:05:00",
+    "last_modified_by": "Alice Smith",
+    "sheet_title": "January Ledger",
+}
+
+
+def test_xlsx_ledger_parseable_with_read_only(catalog: ProvenanceCatalog) -> None:
+    pytest.importorskip("openpyxl")
+    import openpyxl
+
+    from evidence_factory.models import ArtifactProfile
+
+    raw = catalog.write(ArtifactProfile.XLSX_LEDGER, _LEDGER_CSV, _LEDGER_META)
+    assert isinstance(raw, bytes)
+    wb = openpyxl.load_workbook(io.BytesIO(raw), read_only=True)
+    assert len(wb.sheetnames) >= 1
+    wb.close()
+
+
+def test_xlsx_ledger_metadata_round_trips(catalog: ProvenanceCatalog) -> None:
+    pytest.importorskip("openpyxl")
+    import openpyxl
+
+    from evidence_factory.models import ArtifactProfile
+
+    raw = catalog.write(ArtifactProfile.XLSX_LEDGER, _LEDGER_CSV, _LEDGER_META)
+    wb = openpyxl.load_workbook(io.BytesIO(raw))
+    props = wb.properties
+    assert props.creator == "Alice Smith"
+    assert props.lastModifiedBy == "Alice Smith"
+    assert props.created is not None
+    assert props.modified is not None
+    assert props.modified >= props.created  # type: ignore[operator]
+
+
+def test_xlsx_ledger_single_sheet_with_rows(catalog: ProvenanceCatalog) -> None:
+    pytest.importorskip("openpyxl")
+    import openpyxl
+
+    from evidence_factory.models import ArtifactProfile
+
+    raw = catalog.write(ArtifactProfile.XLSX_LEDGER, _LEDGER_CSV, _LEDGER_META)
+    wb = openpyxl.load_workbook(io.BytesIO(raw))
+    ws = wb.active
+    assert ws is not None
+    rows = list(ws.iter_rows(values_only=True))
+    # header row + 3 data rows
+    assert len(rows) >= 4
+    # header row is all strings
+    assert all(isinstance(v, str) for v in rows[0] if v is not None)
+
+
+def test_xlsx_ledger_numeric_and_date_cell_types(catalog: ProvenanceCatalog) -> None:
+    pytest.importorskip("openpyxl")
+    from datetime import datetime
+
+    import openpyxl
+
+    from evidence_factory.models import ArtifactProfile
+
+    raw = catalog.write(ArtifactProfile.XLSX_LEDGER, _LEDGER_CSV, _LEDGER_META)
+    wb = openpyxl.load_workbook(io.BytesIO(raw))
+    ws = wb.active
+    assert ws is not None
+    rows = list(ws.iter_rows(values_only=True))
+    # row[1] = (date, description, amount, category)
+    # date column (col 0) should be a datetime
+    assert isinstance(rows[1][0], datetime), f"expected datetime, got {type(rows[1][0])}"
+    # amount column (col 2) should be numeric
+    assert isinstance(rows[1][2], (int, float)), f"expected numeric, got {type(rows[1][2])}"
+    # description column (col 1) should be a string
+    assert isinstance(rows[1][1], str)
+
+
+def test_xlsx_ledger_sha256_stability(catalog: ProvenanceCatalog) -> None:
+    pytest.importorskip("openpyxl")
+    from evidence_factory.models import ArtifactProfile
+
+    raw1 = catalog.write(ArtifactProfile.XLSX_LEDGER, _LEDGER_CSV, _LEDGER_META)
+    raw2 = catalog.write(ArtifactProfile.XLSX_LEDGER, _LEDGER_CSV, _LEDGER_META)
+    assert hashlib.sha256(raw1).hexdigest() == hashlib.sha256(raw2).hexdigest()
 
 
 # ---------------------------------------------------------------------------

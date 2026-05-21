@@ -33,6 +33,7 @@ _PROFILE_DEVICE_MAP = {
     ArtifactProfile.SMS: ("alice", "alice_phone"),
     ArtifactProfile.PDF: ("alice", "alice_laptop"),
     ArtifactProfile.XLSX: ("alice", "alice_laptop"),
+    ArtifactProfile.XLSX_LEDGER: ("alice", "alice_laptop"),
     ArtifactProfile.JPEG: ("alice", "alice_phone"),
     ArtifactProfile.LOG: ("bob", "bob_workstation"),
 }

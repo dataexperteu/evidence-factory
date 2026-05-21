@@ -12,6 +12,7 @@ class ArtifactProfile(StrEnum):
     SMS = "sms"
     PDF = "pdf"
     XLSX = "xlsx"
+    XLSX_LEDGER = "xlsx_ledger"
     JPEG = "jpeg"
     LOG = "log"
 

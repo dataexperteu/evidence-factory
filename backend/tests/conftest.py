@@ -36,6 +36,7 @@ def personas() -> list[Persona]:
                         ArtifactProfile.EMAIL,
                         ArtifactProfile.PDF,
                         ArtifactProfile.XLSX,
+                        ArtifactProfile.XLSX_LEDGER,
                     },
                 ),
                 Device(

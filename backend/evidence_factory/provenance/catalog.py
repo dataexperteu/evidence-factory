@@ -62,6 +62,7 @@ class ProvenanceCatalog:
             ArtifactProfile.SMS: self._write_sms,
             ArtifactProfile.PDF: self._write_pdf,
             ArtifactProfile.XLSX: self._write_xlsx,
+            ArtifactProfile.XLSX_LEDGER: self._write_xlsx_ledger,
             ArtifactProfile.JPEG: self._write_jpeg,
             ArtifactProfile.LOG: self._write_log,
         }
@@ -129,6 +130,85 @@ class ProvenanceCatalog:
                 if line.strip():
                     ts = str(metadata.get("timestamp", ""))
                     ws.append([ts, line])
+            buf = io.BytesIO()
+            wb.save(buf)
+            return buf.getvalue()
+        except ImportError:
+            return self._write_log(text_content, metadata)
+
+    # ------------------------------------------------------------------
+    # XLSX ledger — structured workbook with core metadata (openpyxl)
+    # ------------------------------------------------------------------
+
+    def _write_xlsx_ledger(self, text_content: str, metadata: dict[str, Any]) -> bytes:
+        try:
+            import csv as _csv
+            from datetime import datetime as _dt
+
+            import openpyxl
+            from openpyxl import Workbook
+
+            wb: Workbook = openpyxl.Workbook()
+            ws = wb.active
+            if ws is None:
+                ws = wb.create_sheet()
+            import re as _re
+            raw_title = str(metadata.get("sheet_title", "Ledger"))
+            ws.title = (_re.sub(r"[/\\?*:\[\]]", "-", raw_title).strip() or "Ledger")[:31]
+
+            creator = str(metadata.get("creator", metadata.get("author", "Evidence Factory")))
+            last_modified_by = str(metadata.get("last_modified_by", creator))
+
+            def _parse_dt(raw: Any) -> _dt:
+                if isinstance(raw, _dt):
+                    return raw
+                if not isinstance(raw, str) or not raw:
+                    return _dt(2024, 1, 1)
+                for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+                    try:
+                        return _dt.strptime(raw, fmt)
+                    except ValueError:
+                        pass
+                return _dt(2024, 1, 1)
+
+            created_dt = _parse_dt(metadata.get("created", metadata.get("timestamp", "")))
+            modified_raw = metadata.get(
+                "modified", metadata.get("created", metadata.get("timestamp", ""))
+            )
+            modified_dt = _parse_dt(modified_raw)
+            if modified_dt < created_dt:
+                modified_dt = created_dt
+
+            wb.properties.creator = creator
+            wb.properties.created = created_dt
+            wb.properties.modified = modified_dt
+            wb.properties.lastModifiedBy = last_modified_by
+
+            def _infer(val: str, is_header: bool) -> Any:
+                if is_header:
+                    return val
+                s = val.strip()
+                try:
+                    return int(s)
+                except ValueError:
+                    pass
+                try:
+                    return float(s)
+                except ValueError:
+                    pass
+                for fmt in ("%Y-%m-%d %H:%M:%S", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%d"):
+                    try:
+                        return _dt.strptime(s, fmt)
+                    except ValueError:
+                        pass
+                return val
+
+            reader = _csv.reader(io.StringIO(text_content))
+            for row_idx, row in enumerate(reader):
+                if not any(cell.strip() for cell in row):
+                    continue
+                ws.append([_infer(cell, row_idx == 0) for cell in row])
+
             buf = io.BytesIO()
             wb.save(buf)
             return buf.getvalue()

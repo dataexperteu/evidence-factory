@@ -18,12 +18,13 @@ BATCH_SIZE = 10
 # Safety valve: stop regenerating after this many total attempts per target slot.
 MAX_ATTEMPTS_MULTIPLIER = 5
 
-# Cycle through all six profiles to ensure even representation.
+# Cycle through all profiles to ensure even representation.
 _PROFILE_CYCLE = [
     ArtifactProfile.EMAIL,
     ArtifactProfile.SMS,
     ArtifactProfile.PDF,
     ArtifactProfile.XLSX,
+    ArtifactProfile.XLSX_LEDGER,
     ArtifactProfile.JPEG,
     ArtifactProfile.LOG,
 ]
@@ -190,6 +191,11 @@ class NoiseGenerator:
                 metadata.setdefault("from", f"{owner}@evidence-factory.local")
             elif profile in (ArtifactProfile.SMS, ArtifactProfile.LOG, ArtifactProfile.XLSX):
                 metadata["timestamp"] = ts_str
+            elif profile == ArtifactProfile.XLSX_LEDGER:
+                metadata["creator"] = owner
+                metadata["created"] = ts_str
+                metadata["modified"] = ts_str
+                metadata["last_modified_by"] = owner
             elif profile == ArtifactProfile.JPEG:
                 metadata["datetime"] = timestamp.strftime("%Y:%m:%d %H:%M:%S")
                 metadata.setdefault("device", device)
