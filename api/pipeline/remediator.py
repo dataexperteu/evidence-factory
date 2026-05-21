@@ -224,8 +224,9 @@ def remediate(
     *,
     disclaimer: str,
 ) -> list[Artifact]:
-    # System-log artifacts are not email-shaped; dilute/split don't apply.
-    if registry.is_system_actor(artifact.owner_id):
+    # dilute() and split() are email-shaped operations; all other profiles
+    # (pdf, xlsx_ledger, jpeg, sms, system_log_csv) pass through unchanged.
+    if artifact.profile != "email":
         return [artifact]
     if strategy == "split":
         return split(artifact, registry, disclaimer=disclaimer)
