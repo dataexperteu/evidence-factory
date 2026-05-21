@@ -122,16 +122,29 @@ passes CI**, or auto-merge will wait forever on a check that can't go green:
 # Allow auto-merge on the repo
 gh api -X PATCH repos/dataexperteu/evidence-factory -f allow_auto_merge=true
 
-# Require the CI checks on main (contexts must match the job names in ci.yml)
+# Require the CI checks on main (contexts must match the job NAMES in ci.yml).
+# Send a JSON body via --input: gh's -f flag stringifies values, and the
+# branch-protection schema rejects "true"/nested arrays as strings (HTTP 422).
 gh api -X PUT repos/dataexperteu/evidence-factory/branches/main/protection \
-  -H "Accept: application/vnd.github+json" \
-  -f 'required_status_checks[strict]=true' \
-  -f 'required_status_checks[checks][][context]=Python (ruff + mypy + pytest)' \
-  -f 'required_status_checks[checks][][context]=Frontend (typecheck + build)' \
-  -F 'enforce_admins=false' \
-  -F 'required_pull_request_reviews=null' \
-  -F 'restrictions=null'
+  -H "Accept: application/vnd.github+json" --input - <<'JSON'
+{
+  "required_status_checks": {
+    "strict": true,
+    "checks": [
+      {"context": "Python (ruff + mypy + pytest)"},
+      {"context": "Frontend (typecheck + build)"}
+    ]
+  },
+  "enforce_admins": false,
+  "required_pull_request_reviews": null,
+  "restrictions": null
+}
+JSON
 ```
+
+Branch protection + native auto-merge require the repo to be **public** or on a
+paid plan; on a free *private* repo both calls 403 ("Upgrade to GitHub Pro or
+make this repository public"). This repo is public.
 
 If auto-merge is not enabled on the repo (or branch protection is absent), the
 harness logs `! auto-merge not enabled …` and leaves the PR for a manual merge
