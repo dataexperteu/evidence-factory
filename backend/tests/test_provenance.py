@@ -216,36 +216,93 @@ def test_jpeg_with_gps(catalog: ProvenanceCatalog) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Log / CSV
+# System log / CSV — access_log schema
 # ---------------------------------------------------------------------------
 
 
-def test_log_is_valid_csv(catalog: ProvenanceCatalog) -> None:
+def test_system_log_csv_access_log_has_required_columns(catalog: ProvenanceCatalog) -> None:
     from evidence_factory.models import ArtifactProfile
 
-    raw = catalog.write(
-        ArtifactProfile.LOG,
-        "User alice logged in.\nFile accessed: report.pdf.",
-        {"source": "auth_service", "timestamp": "2024-01-15 08:00:00"},
-    )
+    metadata = {
+        "schema": "access_log",
+        "controller_id": "ctrl_entrance",
+        "entries": [
+            {
+                "timestamp": "2024-01-15T08:00:00",
+                "badge_id": "b001",
+                "persona_id": "alice",
+                "door_id": "d001",
+                "granted": "true",
+            },
+        ],
+    }
+    raw = catalog.write(ArtifactProfile.SYSTEM_LOG_CSV, "", metadata)
     assert isinstance(raw, bytes)
     decoded = raw.decode("utf-8")
     reader = csv.DictReader(io.StringIO(decoded))
     rows = list(reader)
-    assert len(rows) >= 1
-    assert "message" in (reader.fieldnames or [])
-    assert "timestamp" in (reader.fieldnames or [])
+    assert rows
+    required = {"timestamp", "controller_id", "badge_id", "persona_id", "door_id", "granted"}
+    assert required.issubset(set(reader.fieldnames or []))
 
 
-def test_log_has_all_required_columns(catalog: ProvenanceCatalog) -> None:
+def test_system_log_csv_access_log_is_valid_csv(catalog: ProvenanceCatalog) -> None:
     from evidence_factory.models import ArtifactProfile
 
     raw = catalog.write(
-        ArtifactProfile.LOG,
-        "Event logged.",
-        {"source": "syslog", "timestamp": "2024-02-01 00:00:00"},
+        ArtifactProfile.SYSTEM_LOG_CSV,
+        "",
+        {
+            "schema": "access_log",
+            "controller_id": "ctrl_main",
+            "entries": [
+                {"timestamp": "2024-01-15T08:00:00", "badge_id": "b001",
+                 "persona_id": "alice", "door_id": "d001", "granted": "true"},
+                {"timestamp": "2024-01-15T08:05:00", "badge_id": "b002",
+                 "persona_id": "bob", "door_id": "d001", "granted": "false"},
+            ],
+        },
     )
     decoded = raw.decode("utf-8")
     reader = csv.DictReader(io.StringIO(decoded))
-    required = {"timestamp", "level", "source", "message"}
+    rows = list(reader)
+    assert len(rows) == 2
+    assert rows[0]["persona_id"] == "alice"
+    assert rows[1]["persona_id"] == "bob"
+
+
+# ---------------------------------------------------------------------------
+# System log / CSV — cdr schema
+# ---------------------------------------------------------------------------
+
+
+def test_system_log_csv_cdr_has_required_columns(catalog: ProvenanceCatalog) -> None:
+    from evidence_factory.models import ArtifactProfile
+
+    metadata = {
+        "schema": "cdr",
+        "entries": [
+            {
+                "call_id": "call_001",
+                "start_time": "2024-01-15T09:00:00",
+                "end_time": "2024-01-15T09:10:00",
+                "calling_persona_id": "alice",
+                "called_persona_id": "bob",
+                "calling_number": "+1-555-0101",
+                "called_number": "+1-555-0102",
+                "direction": "outbound",
+            },
+        ],
+    }
+    raw = catalog.write(ArtifactProfile.SYSTEM_LOG_CSV, "", metadata)
+    assert isinstance(raw, bytes)
+    decoded = raw.decode("utf-8")
+    reader = csv.DictReader(io.StringIO(decoded))
+    rows = list(reader)
+    assert rows
+    required = {
+        "call_id", "start_time", "end_time",
+        "calling_persona_id", "called_persona_id",
+        "calling_number", "called_number", "direction",
+    }
     assert required.issubset(set(reader.fieldnames or []))

@@ -136,7 +136,7 @@ def _multi_profile_batches(registry: PersonaRegistry) -> list[list[dict[str, Any
         ArtifactProfile.PDF: ("alice", "alice_laptop"),
         ArtifactProfile.XLSX: ("alice", "alice_laptop"),
         ArtifactProfile.JPEG: ("alice", "alice_phone"),
-        ArtifactProfile.LOG: ("bob", "bob_workstation"),
+        ArtifactProfile.SYSTEM_LOG_CSV: ("bob", "bob_workstation"),
     }
     batches = []
     for profile in ArtifactProfile:

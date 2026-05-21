@@ -34,7 +34,7 @@ _PROFILE_DEVICE_MAP = {
     ArtifactProfile.PDF: ("alice", "alice_laptop"),
     ArtifactProfile.XLSX: ("alice", "alice_laptop"),
     ArtifactProfile.JPEG: ("alice", "alice_phone"),
-    ArtifactProfile.LOG: ("bob", "bob_workstation"),
+    ArtifactProfile.SYSTEM_LOG_CSV: ("bob", "bob_workstation"),
 }
 
 

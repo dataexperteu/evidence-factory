@@ -13,7 +13,7 @@ class ArtifactProfile(StrEnum):
     PDF = "pdf"
     XLSX = "xlsx"
     JPEG = "jpeg"
-    LOG = "log"
+    SYSTEM_LOG_CSV = "system_log_csv"
 
 
 @dataclass

@@ -44,3 +44,6 @@ class PersonaRegistry:
         if not triples:
             raise ValueError("No permitted triples in registry")
         return random.choice(triples)
+
+    def has_persona(self, name: str) -> bool:
+        return name in self._personas

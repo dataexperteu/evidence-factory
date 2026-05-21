@@ -58,4 +58,21 @@ def build_events(
                 )
             )
             counter += 1
+
+    # System-actor events: one per system device, covering all propositions.
+    # These produce system_log_csv artifacts corroborating the full evidence timeline.
+    all_prop_ids = tuple(prop.id for prop in truth.graph.propositions)
+    for sys_idx, sys_device in enumerate(registry.system_devices()):
+        ts = base + timedelta(hours=sys_idx * 12)
+        events.append(
+            Event(
+                id=f"ev_sys_{sys_idx + 1}",
+                timestamp=ts,
+                actor_id=sys_device.owner_id,
+                device_id=sys_device.id,
+                summary=f"System records from {sys_device.label}",
+                proposition_ids=all_prop_ids,
+            )
+        )
+
     return events

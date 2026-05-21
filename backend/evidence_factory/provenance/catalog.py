@@ -63,7 +63,7 @@ class ProvenanceCatalog:
             ArtifactProfile.PDF: self._write_pdf,
             ArtifactProfile.XLSX: self._write_xlsx,
             ArtifactProfile.JPEG: self._write_jpeg,
-            ArtifactProfile.LOG: self._write_log,
+            ArtifactProfile.SYSTEM_LOG_CSV: self._write_system_log_csv,
         }
         return dispatch[profile](text_content, metadata)
 
@@ -133,7 +133,7 @@ class ProvenanceCatalog:
             wb.save(buf)
             return buf.getvalue()
         except ImportError:
-            return self._write_log(text_content, metadata)
+            return self._write_generic_log(text_content, metadata)
 
     # ------------------------------------------------------------------
     # JPEG photo (Pillow + piexif for EXIF)
@@ -190,13 +190,89 @@ class ProvenanceCatalog:
             img.save(buf, format="JPEG", exif=exif_bytes)
             return buf.getvalue()
         except ImportError:
-            return self._write_log(text_content, metadata)
+            return self._write_generic_log(text_content, metadata)
 
     # ------------------------------------------------------------------
-    # Log / CSV (access logs / call-detail records)
+    # System log / CSV — access logs and call-detail records
     # ------------------------------------------------------------------
 
-    def _write_log(self, text_content: str, metadata: dict[str, Any]) -> bytes:
+    def _write_system_log_csv(self, text_content: str, metadata: dict[str, Any]) -> bytes:
+        schema = str(metadata.get("schema", "access_log"))
+        buf = io.StringIO()
+        writer = csv.writer(buf)
+
+        if schema == "cdr":
+            writer.writerow(
+                [
+                    "call_id",
+                    "start_time",
+                    "end_time",
+                    "calling_persona_id",
+                    "called_persona_id",
+                    "calling_number",
+                    "called_number",
+                    "direction",
+                ]
+            )
+            entries: list[dict[str, Any]] = list(metadata.get("entries", []))
+            if entries:
+                entries = sorted(entries, key=lambda e: str(e.get("start_time", "")))
+                for i, entry in enumerate(entries):
+                    writer.writerow(
+                        [
+                            str(entry.get("call_id", f"call_{i:03d}")),
+                            str(entry.get("start_time", "")),
+                            str(entry.get("end_time", "")),
+                            str(entry.get("calling_persona_id", "unknown")),
+                            str(entry.get("called_persona_id", "unknown")),
+                            str(entry.get("calling_number", "+1-000-0000")),
+                            str(entry.get("called_number", "+1-000-0001")),
+                            str(entry.get("direction", "outbound")),
+                        ]
+                    )
+            else:
+                ts = str(metadata.get("timestamp", ""))
+                for i, line in enumerate(text_content.splitlines()):
+                    if line.strip():
+                        writer.writerow(
+                            [f"call_{i:03d}", ts, ts, "unknown", "unknown",
+                             "+1-000-0000", "+1-000-0001", "outbound"]
+                        )
+        else:
+            # access_log (default)
+            writer.writerow(
+                ["timestamp", "controller_id", "badge_id", "persona_id", "door_id", "granted"]
+            )
+            controller_id = str(metadata.get("controller_id", "ctrl_default"))
+            entries = list(metadata.get("entries", []))
+            if entries:
+                entries = sorted(entries, key=lambda e: str(e.get("timestamp", "")))
+                for entry in entries:
+                    writer.writerow(
+                        [
+                            str(entry.get("timestamp", "")),
+                            controller_id,
+                            str(entry.get("badge_id", "badge_unknown")),
+                            str(entry.get("persona_id", "unknown")),
+                            str(entry.get("door_id", "door_main")),
+                            str(entry.get("granted", "true")),
+                        ]
+                    )
+            else:
+                ts = str(metadata.get("timestamp", ""))
+                for line in text_content.splitlines():
+                    if line.strip():
+                        writer.writerow(
+                            [ts, controller_id, "badge_auto", "unknown", "door_main", "true"]
+                        )
+
+        return buf.getvalue().encode("utf-8")
+
+    # ------------------------------------------------------------------
+    # Internal generic log fallback (used by xlsx/jpeg fallback paths)
+    # ------------------------------------------------------------------
+
+    def _write_generic_log(self, text_content: str, metadata: dict[str, Any]) -> bytes:
         buf = io.StringIO()
         writer = csv.writer(buf)
         writer.writerow(["timestamp", "level", "source", "message"])

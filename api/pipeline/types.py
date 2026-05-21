@@ -39,12 +39,12 @@ class Persona:
 
 @dataclass(frozen=True)
 class Device:
-    """A device or account owned by a Persona, capable of emitting one profile."""
+    """A device or account owned by a Persona or system actor, capable of emitting one profile."""
 
     id: str
     owner_id: str
     label: str
-    profile: Literal["email"]
+    profile: Literal["email", "system_log_csv"]
 
 
 @dataclass(frozen=True)
@@ -66,7 +66,7 @@ class Artifact:
     id: str
     owner_id: str
     device_id: str
-    profile: Literal["email"]
+    profile: Literal["email", "system_log_csv"]
     filename: str
     payload: bytes
     sha256: str

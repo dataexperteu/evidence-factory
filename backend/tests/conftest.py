@@ -53,7 +53,7 @@ def personas() -> list[Persona]:
                     device_id="bob_workstation",
                     owner="bob",
                     permitted_profiles={
-                        ArtifactProfile.LOG,
+                        ArtifactProfile.SYSTEM_LOG_CSV,
                         ArtifactProfile.EMAIL,
                         ArtifactProfile.PDF,
                     },

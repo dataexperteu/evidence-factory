@@ -25,7 +25,7 @@ _PROFILE_CYCLE = [
     ArtifactProfile.PDF,
     ArtifactProfile.XLSX,
     ArtifactProfile.JPEG,
-    ArtifactProfile.LOG,
+    ArtifactProfile.SYSTEM_LOG_CSV,
 ]
 
 
@@ -188,7 +188,7 @@ class NoiseGenerator:
             if profile == ArtifactProfile.EMAIL:
                 metadata.setdefault("date", timestamp.strftime("%a, %d %b %Y %H:%M:%S +0000"))
                 metadata.setdefault("from", f"{owner}@evidence-factory.local")
-            elif profile in (ArtifactProfile.SMS, ArtifactProfile.LOG, ArtifactProfile.XLSX):
+            elif profile in (ArtifactProfile.SMS, ArtifactProfile.XLSX):
                 metadata["timestamp"] = ts_str
             elif profile == ArtifactProfile.JPEG:
                 metadata["datetime"] = timestamp.strftime("%Y:%m:%d %H:%M:%S")
@@ -196,6 +196,57 @@ class NoiseGenerator:
             elif profile == ArtifactProfile.PDF:
                 metadata["created"] = "D:" + timestamp.strftime("%Y%m%d%H%M%S")
                 metadata.setdefault("author", owner)
+            elif profile == ArtifactProfile.SYSTEM_LOG_CSV:
+                valid_persona_names = set(self._registry.persona_names())
+                existing_entries: list[dict[str, Any]] = list(metadata.get("entries", []))
+                if existing_entries:
+                    # Validate: drop entries referencing unknown personas
+                    validated = [
+                        e for e in existing_entries
+                        if str(e.get("persona_id", "")) in valid_persona_names
+                    ]
+                    if existing_entries and not validated:
+                        logger.debug(
+                            "All SYSTEM_LOG_CSV entries reference unknown persona IDs; skipping"
+                        )
+                        continue
+                    metadata["entries"] = validated
+                else:
+                    # Build entries from text_content using registry personas
+                    personas = sorted(valid_persona_names)
+                    if not personas:
+                        continue
+                    built: list[dict[str, Any]] = []
+                    for i, line in enumerate(text_content.splitlines()):
+                        if not line.strip() or i >= 5:
+                            break
+                        entry_ts = timestamp + timedelta(minutes=i * 5)
+                        if entry_ts > timeline.end:
+                            entry_ts = timestamp
+                        p_name = personas[i % len(personas)]
+                        built.append(
+                            {
+                                "timestamp": entry_ts.isoformat(),
+                                "badge_id": f"badge_{p_name}",
+                                "persona_id": p_name,
+                                "door_id": f"door_{i % 3}",
+                                "granted": "true",
+                            }
+                        )
+                    if not built:
+                        p_name = personas[0]
+                        built = [
+                            {
+                                "timestamp": timestamp.isoformat(),
+                                "badge_id": f"badge_{p_name}",
+                                "persona_id": p_name,
+                                "door_id": "door_main",
+                                "granted": "true",
+                            }
+                        ]
+                    metadata["entries"] = built
+                metadata.setdefault("schema", "access_log")
+                metadata.setdefault("controller_id", device)
 
             try:
                 content = self._catalog.write(profile, text_content, metadata)
