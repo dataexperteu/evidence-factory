@@ -131,6 +131,35 @@ def test_smoke_closure_passes_for_every_proposition():
         )
 
 
+def test_smoke_solution_pack_records_remediation_activity():
+    """Slice 8: the sealed pack documents what the Smoking-Gun Critic flagged
+    and how the Remediator defused it. Default difficulty reliably flags every
+    full-strength artifact, so remediation activity must be non-empty."""
+    zip_bytes = _run()
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        names = zf.namelist()
+        assert "SOLUTION/remediation_log.json" in names
+        remediation = json.loads(zf.read("SOLUTION/remediation_log.json"))
+        ledger = json.loads(zf.read("SOLUTION/signal_ledger.json"))
+
+    records = remediation["remediations"]
+    assert records, "expected at least one artifact to be flagged and remediated"
+    assert all(r["strategy"] in ("split", "dilute", "none") for r in records)
+    assert any(r["outcome"] == "remediated" for r in records)
+
+    # Every flagged-and-remediated artifact names the products it produced.
+    for r in records:
+        if r["outcome"] == "remediated":
+            assert r["produced_artifact_ids"]
+
+    # Critic verdicts are recorded on the Signal Ledger; at least one flagged.
+    verdicts = ledger["critic_verdicts"]
+    assert verdicts
+    assert any(v["too_strong"] for v in verdicts)
+    # Remediation activity is mirrored on the ledger too.
+    assert ledger["remediations"]
+
+
 def test_smoke_two_runs_produce_different_corpora():
     """Acceptance criterion: identical inputs yield a *different* corpus."""
     z1 = _run()
