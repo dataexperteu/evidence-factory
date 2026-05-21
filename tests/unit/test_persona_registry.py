@@ -6,13 +6,40 @@ from api.pipeline.persona_registry import PersonaRegistry, RegistryError, defaul
 from api.pipeline.types import Device, Persona
 
 
-def test_default_registry_has_four_email_personas():
+def test_default_registry_email_personas():
+    """Slice 1's four email personas are still present and own email devices."""
     reg = default_registry()
-    assert len(reg.personas()) == 4
-    for persona in reg.personas():
+    email_persona_ids = {"p_holmes", "p_watson", "p_hudson", "p_lestrade"}
+    for pid in email_persona_ids:
+        persona = reg.get_persona(pid)
         devs = reg.devices_for(persona.id)
-        assert len(devs) == 1
-        assert devs[0].profile == "email"
+        assert any(d.profile == "email" for d in devs), f"{pid} must have an email device"
+
+
+def test_default_registry_jpeg_personas():
+    """Slice 6 adds at least two JPEG-capable device owners to the registry."""
+    reg = default_registry()
+    jpeg_device_owners = {
+        d.owner_id
+        for p in reg.personas()
+        for d in reg.devices_for(p.id)
+        if d.profile == "jpeg"
+    }
+    assert len(jpeg_device_owners) >= 2
+
+
+def test_default_registry_jpeg_devices_carry_make_model():
+    """JPEG devices must have non-empty make and model strings."""
+    reg = default_registry()
+    jpeg_devices = [
+        d
+        for p in reg.personas()
+        for d in reg.devices_for(p.id)
+        if d.profile == "jpeg"
+    ]
+    for dev in jpeg_devices:
+        assert dev.make, f"device {dev.id} missing make"
+        assert dev.model, f"device {dev.id} missing model"
 
 
 def test_is_permitted_only_for_owner_device_profile():

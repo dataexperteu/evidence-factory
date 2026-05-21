@@ -44,7 +44,10 @@ class Device:
     id: str
     owner_id: str
     label: str
-    profile: Literal["email"]
+    profile: Literal["email", "jpeg"]
+    make: str = ""
+    model: str = ""
+    gps_capable: bool = False
 
 
 @dataclass(frozen=True)
@@ -66,7 +69,7 @@ class Artifact:
     id: str
     owner_id: str
     device_id: str
-    profile: Literal["email"]
+    profile: Literal["email", "jpeg"]
     filename: str
     payload: bytes
     sha256: str

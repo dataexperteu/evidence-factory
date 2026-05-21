@@ -157,8 +157,10 @@ class ProvenanceCatalog:
             exif_dict: dict[str, Any] = {
                 "0th": {
                     piexif.ImageIFD.DateTime: dt_str.encode(),
-                    piexif.ImageIFD.Make: b"EvidenceFactory",
-                    piexif.ImageIFD.Model: str(metadata.get("device", "Device")).encode(),
+                    piexif.ImageIFD.Make: str(metadata.get("make", "EvidenceFactory")).encode(),
+                    piexif.ImageIFD.Model: str(
+                        metadata.get("model", metadata.get("device", "Device"))
+                    ).encode(),
                 },
                 "Exif": {
                     piexif.ExifIFD.DateTimeOriginal: dt_str.encode(),

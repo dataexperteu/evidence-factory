@@ -215,6 +215,102 @@ def test_jpeg_with_gps(catalog: ProvenanceCatalog) -> None:
     assert piexif.GPSIFD.GPSLatitude in exif["GPS"]
 
 
+def test_jpeg_make_model_from_metadata(catalog: ProvenanceCatalog) -> None:
+    """Make and Model EXIF tags must come from metadata, not be hardcoded."""
+    pytest.importorskip("piexif")
+    pytest.importorskip("PIL")
+    import piexif
+
+    from evidence_factory.models import ArtifactProfile
+
+    raw = catalog.write(
+        ArtifactProfile.JPEG,
+        "Device photo.",
+        {"datetime": "2024:01:15 10:30:00", "make": "Apple", "model": "iPhone 15 Pro"},
+    )
+    exif = piexif.load(raw)
+    make = exif["0th"].get(piexif.ImageIFD.Make, b"").decode()
+    model = exif["0th"].get(piexif.ImageIFD.Model, b"").decode()
+    assert "Apple" in make
+    assert "iPhone 15 Pro" in model
+
+
+def test_jpeg_datetime_original_matches_metadata(catalog: ProvenanceCatalog) -> None:
+    """DateTimeOriginal EXIF tag must match the datetime provided in metadata."""
+    pytest.importorskip("piexif")
+    pytest.importorskip("PIL")
+    import piexif
+
+    from evidence_factory.models import ArtifactProfile
+
+    dt_str = "2024:03:15 14:22:00"
+    raw = catalog.write(
+        ArtifactProfile.JPEG,
+        "Timestamp test.",
+        {"datetime": dt_str, "device": "cam01"},
+    )
+    exif = piexif.load(raw)
+    dto = exif["Exif"].get(piexif.ExifIFD.DateTimeOriginal, b"").decode()
+    assert dto == dt_str
+
+
+def test_jpeg_exif_round_trip_two_independent_libraries(catalog: ProvenanceCatalog) -> None:
+    """EXIF data read by piexif and exifread must agree on DateTimeOriginal."""
+    pytest.importorskip("piexif")
+    pytest.importorskip("PIL")
+    pytest.importorskip("exifread")
+    import io as _io
+
+    import exifread
+    import piexif
+
+    from evidence_factory.models import ArtifactProfile
+
+    dt_str = "2024:06:01 09:00:00"
+    raw = catalog.write(
+        ArtifactProfile.JPEG,
+        "Two-library test.",
+        {
+            "datetime": dt_str,
+            "make": "Canon",
+            "model": "EOS R5",
+            "gps_lat": 51.5,
+            "gps_lon": -0.1,
+        },
+    )
+
+    # Reader 1: piexif
+    exif1 = piexif.load(raw)
+    dto_piexif = exif1["Exif"].get(piexif.ExifIFD.DateTimeOriginal, b"").decode()
+
+    # Reader 2: exifread (independent library)
+    tags = exifread.process_file(_io.BytesIO(raw), details=False)
+    dto_exifread = str(tags.get("EXIF DateTimeOriginal", ""))
+
+    assert dto_piexif == dt_str, f"piexif read {dto_piexif!r}, expected {dt_str!r}"
+    assert dto_exifread == dt_str, f"exifread read {dto_exifread!r}, expected {dt_str!r}"
+    assert dto_piexif == dto_exifread  # Both libraries agree
+
+
+def test_jpeg_pillow_image_open(catalog: ProvenanceCatalog) -> None:
+    """Pillow.Image.open() must be able to decode the produced JPEG bytes."""
+    pytest.importorskip("PIL")
+    import io as _io
+
+    from PIL import Image
+
+    from evidence_factory.models import ArtifactProfile
+
+    raw = catalog.write(
+        ArtifactProfile.JPEG,
+        "Pillow decode test.",
+        {"datetime": "2024:02:20 08:00:00", "device": "cam02"},
+    )
+    img = Image.open(_io.BytesIO(raw))
+    assert img.format == "JPEG"
+    assert img.size == (320, 240)
+
+
 # ---------------------------------------------------------------------------
 # Log / CSV
 # ---------------------------------------------------------------------------

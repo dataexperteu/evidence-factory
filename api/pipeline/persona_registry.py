@@ -50,11 +50,13 @@ class PersonaRegistry:
 
 
 def default_registry() -> PersonaRegistry:
-    """The tracer-bullet cast: four personas, one email device each.
+    """Cast of personas with email and JPEG-photo devices.
 
-    Four owners gives the Closure Verifier headroom for owner-distinct
-    corroboration thresholds up to 4. Identifiers are stable so the e2e
-    smoke test can assert on them.
+    Slice 1 added four email personas (Holmes, Watson, Hudson, Lestrade).
+    Slice 6 adds two smartphone personas (Irene Adler, Mycroft Holmes) placed
+    at registry indices 2 and 3 so that build_events with
+    owners_per_proposition=3 selects Holmes(email), Watson(email),
+    Irene(jpeg) — producing both .eml and .jpg artifacts in the corpus.
     """
     personas = [
         Persona(
@@ -64,6 +66,16 @@ def default_registry() -> PersonaRegistry:
         ),
         Persona(
             id="p_watson", display_name="John Watson", email_address="watson@baker-street.example"
+        ),
+        Persona(
+            id="p_irene",
+            display_name="Irene Adler",
+            email_address="irene@adler.example",
+        ),
+        Persona(
+            id="p_mycroft",
+            display_name="Mycroft Holmes",
+            email_address="mycroft@diogenes.example",
         ),
         Persona(
             id="p_hudson", display_name="Martha Hudson", email_address="hudson@baker-street.example"
@@ -77,6 +89,24 @@ def default_registry() -> PersonaRegistry:
     devices = [
         Device(id="d_holmes_mail", owner_id="p_holmes", label="holmes-laptop", profile="email"),
         Device(id="d_watson_mail", owner_id="p_watson", label="watson-laptop", profile="email"),
+        Device(
+            id="d_irene_phone",
+            owner_id="p_irene",
+            label="irene-phone",
+            profile="jpeg",
+            make="Apple",
+            model="iPhone 15 Pro",
+            gps_capable=True,
+        ),
+        Device(
+            id="d_mycroft_camera",
+            owner_id="p_mycroft",
+            label="mycroft-camera",
+            profile="jpeg",
+            make="Canon",
+            model="EOS R5",
+            gps_capable=False,
+        ),
         Device(id="d_hudson_mail", owner_id="p_hudson", label="hudson-tablet", profile="email"),
         Device(
             id="d_lestrade_mail", owner_id="p_lestrade", label="lestrade-desktop", profile="email"

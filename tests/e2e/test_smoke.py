@@ -25,6 +25,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 
 import mailparser
+import pytest
 
 from api.pipeline.orchestrator import run_sync
 from api.pipeline.persona_registry import default_registry
@@ -136,6 +137,51 @@ def test_smoke_two_runs_produce_different_corpora():
     z1 = _run()
     z2 = _run()
     assert z1 != z2
+
+
+def test_smoke_corpus_contains_jpeg_artifacts():
+    """Slice 6: JPEG-device personas produce .jpg artifacts in the corpus."""
+    zip_bytes = _run()
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        jpeg_paths = [n for n in zf.namelist() if n.startswith("corpus/") and n.endswith(".jpg")]
+    assert jpeg_paths, "corpus must contain at least one .jpg artifact"
+
+
+def test_smoke_jpeg_artifacts_are_owner_bound():
+    """Slice 6: every .jpg path in the corpus maps to a known persona/device."""
+    zip_bytes = _run()
+    registry = default_registry()
+    valid_persona_slugs = {_slug(p.display_name): p.id for p in registry.personas()}
+    valid_device_labels = {
+        d.label: d.owner_id
+        for p in registry.personas()
+        for d in registry.devices_for(p.id)
+    }
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        jpeg_paths = [n for n in zf.namelist() if n.startswith("corpus/") and n.endswith(".jpg")]
+    for path in jpeg_paths:
+        _, custodian, device, _ = path.split("/")
+        assert custodian in valid_persona_slugs, f"unknown custodian slug {custodian}"
+        assert device in valid_device_labels, f"unknown device label {device}"
+        owner_of_device = valid_device_labels[device]
+        assert valid_persona_slugs[custodian] == owner_of_device, (
+            f"device {device} not owned by {custodian}"
+        )
+
+
+def test_smoke_jpeg_artifacts_are_valid_jpegs():
+    """Slice 6: every .jpg artifact must be parseable by Pillow."""
+    pytest.importorskip("PIL")
+    from PIL import Image
+
+    zip_bytes = _run()
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        jpeg_paths = [n for n in zf.namelist() if n.startswith("corpus/") and n.endswith(".jpg")]
+    for path in jpeg_paths:
+        with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+            payload = zf.read(path)
+        img = Image.open(io.BytesIO(payload))
+        assert img.format == "JPEG", f"{path} is not a valid JPEG"
 
 
 def test_smoke_url_path_extracts_and_runs_pipeline():
