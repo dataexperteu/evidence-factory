@@ -4,7 +4,7 @@ Wires the stages and produces a stream of progress events the FastAPI SSE
 endpoint can publish. Implemented as an async generator so the orchestrator
 itself does not depend on FastAPI.
 
-Stages emitted: intake, extract, events, emit, close, package, done.
+Stages emitted: intake, extract, events, emit, critique, close, package, done.
 On failure (e.g. closure failure) a `failed` event with a structured payload
 is emitted instead of `done`.
 """
@@ -13,20 +13,27 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import random
 import secrets
 from collections.abc import AsyncIterator
 from dataclasses import asdict, dataclass, field
+from datetime import UTC, datetime
 
 from .artifact_emitter import emit_artifacts
 from .attestation import SYNTHETIC_EVIDENCE_DISCLAIMER, gate
 from .closure_verifier import verify_closure
+from .critic import SmokingGunCritic
 from .event_graph import build_events
 from .llm_gateway import LLMGateway
 from .packager import PackagerInput, assert_separation, build_zip
 from .persona_registry import default_registry
+from .remediation import run_critique_pass, top_up_closure
+from .remediator import RandomStrategySelector
 from .signal_ledger import SignalLedger
 from .source_intake import ingest_paste
 from .truth_extractor import extract_truth
+
+_TOPUP_BASE_TIME = datetime(2024, 6, 10, 9, 0, 0, tzinfo=UTC)
 
 LOG = logging.getLogger("evidence_factory.orchestrator")
 
@@ -48,6 +55,7 @@ class RunResult:
     artifact_count: int
     proposition_count: int
     cache_hits: int
+    remediation_count: int = 0
 
 
 @dataclass
@@ -106,8 +114,43 @@ async def run_pipeline(
     )
     yield ProgressEvent("emit", "complete", {"artifacts": len(artifacts)}), None
 
+    yield ProgressEvent("critique", "started"), None
+    critic = SmokingGunCritic(gateway)
+    selector = RandomStrategySelector(random.Random(secrets.randbits(64)))
+    artifacts, remediation_log = run_critique_pass(
+        artifacts,
+        truth,
+        registry,
+        critic=critic,
+        selector=selector,
+        ledger=ledger,
+        disclaimer=SYNTHETIC_EVIDENCE_DISCLAIMER,
+    )
+    remediated = sum(1 for r in remediation_log if r.outcome == "remediated")
+    unresolved = sum(1 for r in remediation_log if r.outcome == "failed_after_retries")
+    yield (
+        ProgressEvent(
+            "critique",
+            "complete",
+            {"flagged": len(remediation_log), "remediated": remediated, "unresolved": unresolved},
+        ),
+        None,
+    )
+
     yield ProgressEvent("close", "started"), None
     closure = verify_closure(truth.graph, ledger, settings.min_owner_distinct)
+    if not closure.ok:
+        # Remediation may have dropped a proposition below threshold; top it up
+        # with weak corroborators and re-check before failing.
+        added, closure = top_up_closure(
+            truth.graph,
+            ledger,
+            registry,
+            settings.min_owner_distinct,
+            disclaimer=SYNTHETIC_EVIDENCE_DISCLAIMER,
+            base_time=_TOPUP_BASE_TIME,
+        )
+        artifacts.extend(added)
     if not closure.ok:
         gap_payload = [
             {
@@ -132,6 +175,7 @@ async def run_pipeline(
             attestation_text=attestation.as_text(),
             disclaimer=SYNTHETIC_EVIDENCE_DISCLAIMER,
             run_id=run_id,
+            remediation_log=[r.to_json_serialisable() for r in remediation_log],
         )
     )
     assert_separation(zip_bytes)
@@ -143,6 +187,7 @@ async def run_pipeline(
         artifact_count=len(artifacts),
         proposition_count=len(truth.graph.propositions),
         cache_hits=gateway.stats.hits,
+        remediation_count=remediated,
     )
     yield (
         ProgressEvent(

@@ -17,6 +17,8 @@ from .types import Artifact, LedgerEntry
 class SignalLedger:
     def __init__(self) -> None:
         self._entries: list[LedgerEntry] = []
+        self._critic_verdicts: list[dict] = []
+        self._remediations: list[dict] = []
 
     def record(self, artifact: Artifact) -> None:
         self._entries.append(
@@ -29,6 +31,27 @@ class SignalLedger:
                 signal_weight=artifact.signal_weight,
             )
         )
+
+    def replace_entries(self, artifacts: list[Artifact]) -> None:
+        """Rebuild artifact corroboration entries from the post-remediation set.
+
+        Critic verdicts and remediation records are preserved — only the
+        artifact ledger entries are recomputed."""
+        self._entries = []
+        for artifact in artifacts:
+            self.record(artifact)
+
+    def record_critic_verdict(self, verdict: dict) -> None:
+        self._critic_verdicts.append(verdict)
+
+    def record_remediation(self, record: dict) -> None:
+        self._remediations.append(record)
+
+    def critic_verdicts(self) -> list[dict]:
+        return list(self._critic_verdicts)
+
+    def remediations(self) -> list[dict]:
+        return list(self._remediations)
 
     def entries(self) -> list[LedgerEntry]:
         return list(self._entries)

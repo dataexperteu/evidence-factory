@@ -20,15 +20,27 @@ Real mode (Anthropic SDK) is wired so the slice 2 author only needs to set
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 import random
+import re
 from dataclasses import dataclass, field
 from typing import Literal
 
 LOG = logging.getLogger("evidence_factory.llm")
 
 Role = Literal["truth_extractor", "event_graph", "artifact_content", "critic", "closure", "noise"]
+
+# The smoking-gun bar: a single load-bearing artifact carrying this much (or
+# more) signal weight is judged strong enough to prove its bound proposition on
+# its own. The fixture critic uses it to stand in for the LLM's judgement; the
+# Remediator drives every flagged artifact below this bar (split halves the
+# weight per fragment, dilute scales it down), so the bounded re-critic loop
+# terminates. Real-mode critique ignores this constant entirely.
+SMOKING_GUN_WEIGHT_THRESHOLD = 1.0
+
+_WEIGHT_RE = re.compile(r"signal_weight=([0-9]*\.?[0-9]+)")
 
 _REASONING_ROLES: set[Role] = {
     "truth_extractor",
@@ -97,12 +109,31 @@ class LLMGateway:
     def _fixture_complete(self, role: Role, prompt: str) -> str:
         """Deterministic-ish synthetic text. NOT a model substitute — just
         enough structure to let the orchestrator wire-up be tested."""
+        if role == "critic":
+            return self._fixture_critic_verdict(prompt)
         salt = self._rng.randint(1_000, 9_999)
         digest = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:8]
         return (
             f"[{role}::{digest}::{salt}] synthetic fixture response — "
             f"this run is non-deterministic by design."
         )
+
+    def _fixture_critic_verdict(self, prompt: str) -> str:
+        """Stand in for the Smoking-Gun Critic LLM with a structured verdict.
+
+        The prompt carries a machine-readable `signal_weight=` token; a single
+        artifact at or above the smoking-gun bar is judged `too_strong`. This
+        keeps the fixture deterministic (so the e2e smoke reliably triggers
+        remediation) while still exercising the real JSON verdict schema."""
+        match = _WEIGHT_RE.search(prompt)
+        weight = float(match.group(1)) if match else 0.0
+        too_strong = weight >= SMOKING_GUN_WEIGHT_THRESHOLD
+        reason = (
+            "single artifact at full signal weight would prove the bound proposition outright"
+            if too_strong
+            else "signal corroborates but is not individually dispositive"
+        )
+        return json.dumps({"too_strong": too_strong, "reason": reason})
 
     # -- real mode ------------------------------------------------------
 

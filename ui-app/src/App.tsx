@@ -8,7 +8,7 @@ type StageEvent = {
   detail: Record<string, unknown>;
 };
 
-const STAGES = ["intake", "extract", "events", "emit", "close", "package", "done"] as const;
+const STAGES = ["intake", "extract", "events", "emit", "critique", "close", "package", "done"] as const;
 
 export function App() {
   const [mode, setMode] = useState<IntakeMode>("paste");

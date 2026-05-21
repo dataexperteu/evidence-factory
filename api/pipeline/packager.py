@@ -21,7 +21,7 @@ import io
 import json
 import re
 import zipfile
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 
 from .persona_registry import PersonaRegistry
@@ -44,6 +44,7 @@ class PackagerInput:
     attestation_text: str
     disclaimer: str
     run_id: str
+    remediation_log: list[dict] = field(default_factory=list)
 
 
 def _corpus_path(registry: PersonaRegistry, art: Artifact) -> str:
@@ -124,11 +125,24 @@ def build_zip(inp: PackagerInput) -> bytes:
         )
         zf.writestr(
             "SOLUTION/signal_ledger.json",
-            json.dumps({"entries": inp.ledger.to_json_serialisable()}, indent=2),
+            json.dumps(
+                {
+                    "entries": inp.ledger.to_json_serialisable(),
+                    "critic_verdicts": inp.ledger.critic_verdicts(),
+                    "remediations": inp.ledger.remediations(),
+                },
+                indent=2,
+            ),
         )
         zf.writestr(
             "SOLUTION/per_artifact_provenance.json",
             json.dumps({"run_id": inp.run_id, "artifacts": provenance}, indent=2),
+        )
+        zf.writestr(
+            "SOLUTION/remediation_log.json",
+            json.dumps(
+                {"run_id": inp.run_id, "remediations": inp.remediation_log}, indent=2
+            ),
         )
 
     return buf.getvalue()

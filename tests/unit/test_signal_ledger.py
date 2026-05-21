@@ -53,3 +53,20 @@ def test_json_serialisable_round_trips_fields():
             "signal_weight": 1.0,
         }
     ]
+
+
+def test_replace_entries_rebuilds_corroboration_but_keeps_critic_records():
+    led = SignalLedger()
+    led.record(_art("old", "p_holmes", ("prop_1",)))
+    led.record_critic_verdict({"artifact_id": "old", "too_strong": True, "reason": "r"})
+    led.record_remediation({"flagged_artifact_id": "old", "strategy": "split"})
+
+    led.replace_entries([_art("new", "p_watson", ("prop_1",))])
+
+    assert {e.artifact_id for e in led.entries()} == {"new"}
+    assert led.distinct_owners_for("prop_1") == {"p_watson"}
+    # Verdicts and remediation activity survive the rebuild.
+    assert led.critic_verdicts() == [
+        {"artifact_id": "old", "too_strong": True, "reason": "r"}
+    ]
+    assert led.remediations() == [{"flagged_artifact_id": "old", "strategy": "split"}]
