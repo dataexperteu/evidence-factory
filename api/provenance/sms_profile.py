@@ -62,6 +62,9 @@ def write_sms(brief: SmsBrief, *, disclaimer: str) -> WrittenSms:
     lines: list[str] = [
         "# SMS EXPORT — SYNTHETIC EVIDENCE",
         f"# {disclaimer}",
+        # Named thread-metadata field so a reader can recover the watermark
+        # without scraping the free-text header/footer.
+        f"# Synthetic-Evidence: {disclaimer}",
         f"# Conversation between {brief.sender_name} ({brief.sender_number})"
         f" and {brief.recipient_name} ({brief.recipient_number})",
         f"# Exported at: {ts_str}",

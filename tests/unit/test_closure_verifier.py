@@ -191,3 +191,87 @@ def test_red_herring_margin_is_configurable():
     assert not verify_closure(
         graph, led, min_owner_distinct=2, red_herrings=[rh], breaker_margin=1.0
     ).ok
+
+
+# -- dominance invariant (slice 11) ----------------------------------------
+# `_full_ledger(_graph("p1"))` gives the true account an aggregate support of
+# 2.0 (two owner-distinct artifacts at weight 1.0). With dominance_margin 0.5
+# the ceiling a contested alternative must stay below is 2.0 * (1 - 0.5) = 1.0.
+
+
+def test_dominance_passes_when_alternative_is_weakly_supported():
+    graph = _graph("p1")
+    led = _full_ledger(graph)
+    rh = _red_herring(support=0.4, breakers=[("o_a", 0.45), ("o_b", 0.45)])
+    result = verify_closure(
+        graph,
+        led,
+        min_owner_distinct=2,
+        red_herrings=[rh],
+        breaker_margin=0.5,
+        dominance_margin=0.5,
+    )
+    assert result.ok is True
+    assert result.dominance_gaps == []
+
+
+def test_dominance_violation_when_alternative_rivals_truth_support():
+    graph = _graph("p1")
+    led = _full_ledger(graph)  # truth aggregate support = 2.0 -> ceiling 1.0
+    # Support 1.2 breaches the ceiling, yet the breaker bundle is fully valid
+    # (refutes by margin, owner-distinct, none individually convicts), so the
+    # failure is isolated to the dominance invariant.
+    rh = _red_herring(support=1.2, breakers=[("o_a", 0.7), ("o_b", 0.7), ("o_c", 0.7)])
+    result = verify_closure(
+        graph,
+        led,
+        min_owner_distinct=2,
+        red_herrings=[rh],
+        breaker_margin=0.5,
+        dominance_margin=0.5,
+    )
+    assert result.ok is False
+    assert result.gaps == []
+    assert result.red_herring_gaps == []
+    assert len(result.dominance_gaps) == 1
+    gap = result.dominance_gaps[0]
+    assert gap.alternative_id == "prop_rh"
+    assert gap.truth_support == 2.0
+    assert gap.alternative_support == 1.2
+    assert gap.required_max_support == 1.0
+    assert gap.margin_shortfall == pytest.approx(0.2)
+    assert "dominance margin" in gap.reason
+
+
+def test_dominance_margin_is_configurable():
+    graph = _graph("p1")
+    led = _full_ledger(graph)  # truth aggregate support = 2.0
+    rh = _red_herring(support=0.9, breakers=[("o_a", 0.7), ("o_b", 0.7), ("o_c", 0.7)])
+    # margin 0.5 -> ceiling 1.0 -> 0.9 <= 1.0 -> dominates
+    assert (
+        verify_closure(
+            graph,
+            led,
+            min_owner_distinct=2,
+            red_herrings=[rh],
+            breaker_margin=0.5,
+            dominance_margin=0.5,
+        ).dominance_gaps
+        == []
+    )
+    # margin 0.6 -> ceiling 0.8 -> 0.9 > 0.8 -> dominance violation
+    assert verify_closure(
+        graph,
+        led,
+        min_owner_distinct=2,
+        red_herrings=[rh],
+        breaker_margin=0.5,
+        dominance_margin=0.6,
+    ).dominance_gaps
+
+
+def test_dominance_margin_must_be_in_unit_interval():
+    with pytest.raises(ValueError):
+        verify_closure(_graph("p1"), SignalLedger(), min_owner_distinct=1, dominance_margin=1.0)
+    with pytest.raises(ValueError):
+        verify_closure(_graph("p1"), SignalLedger(), min_owner_distinct=1, dominance_margin=-0.1)

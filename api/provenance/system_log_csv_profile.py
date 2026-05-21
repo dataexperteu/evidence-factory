@@ -125,9 +125,14 @@ def write_system_log_csv(brief: SystemLogBrief, *, disclaimer: str) -> WrittenSy
         raise ValueError("system log must reference at least one persona_id")
 
     if brief.schema == "cdr":
-        payload = _write_cdr(brief)
+        body = _write_cdr(brief)
     else:
-        payload = _write_access_log(brief)
+        body = _write_access_log(brief)
+
+    # Leading comment row carries the synthetic-evidence watermark. Forensic CSV
+    # readers skip `#`-prefixed lines, so this does not disturb the columns.
+    comment = f"# SYNTHETIC EVIDENCE — {disclaimer}\n".encode()
+    payload = comment + body
 
     sha = hashlib.sha256(payload).hexdigest()
 
