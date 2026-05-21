@@ -19,6 +19,7 @@ class SignalLedger:
         self._entries: list[LedgerEntry] = []
         self._critic_verdicts: list[dict] = []
         self._remediations: list[dict] = []
+        self._red_herring_schedules: list[dict] = []
 
     def record(self, artifact: Artifact) -> None:
         self._entries.append(
@@ -46,6 +47,14 @@ class SignalLedger:
 
     def record_remediation(self, record: dict) -> None:
         self._remediations.append(record)
+
+    def record_red_herring_schedule(self, record: dict) -> None:
+        """Note a red herring the ``demote`` strategy created and needs a breaker
+        bundle for. The Red-Herring & Breaker Designer drains these afterwards."""
+        self._red_herring_schedules.append(record)
+
+    def scheduled_red_herrings(self) -> list[dict]:
+        return list(self._red_herring_schedules)
 
     def critic_verdicts(self) -> list[dict]:
         return list(self._critic_verdicts)

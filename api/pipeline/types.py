@@ -92,6 +92,7 @@ class LedgerEntry:
 class ClosureResult:
     ok: bool
     gaps: list[ClosureGap] = field(default_factory=list)
+    red_herring_gaps: list[RedHerringGap] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -100,3 +101,43 @@ class ClosureGap:
     required: int
     observed: int
     distinct_owners: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class RedHerring:
+    """A false proposition refuted-by-construction.
+
+    ``supporting`` are the plausible-but-weak artifacts that make the false
+    lead tempting; ``breakers`` are the breaker bundle that conclusively
+    refutes it *in aggregate*. No single breaker may convict on its own (each
+    must pass the Smoking-Gun Critic), so a bundle is owner-distinct and
+    typically fragmented across owners/devices/formats.
+    """
+
+    proposition: Proposition
+    supporting: tuple[Artifact, ...]
+    breakers: tuple[Artifact, ...]
+
+    @property
+    def support_signal(self) -> float:
+        return sum(a.signal_weight for a in self.supporting)
+
+    @property
+    def breaker_signal(self) -> float:
+        return sum(a.signal_weight for a in self.breakers)
+
+    def distinct_breaker_owners(self) -> tuple[str, ...]:
+        return tuple(sorted({a.owner_id for a in self.breakers}))
+
+
+@dataclass(frozen=True)
+class RedHerringGap:
+    """A red herring whose breaker bundle fails the closure invariant."""
+
+    proposition_id: str
+    support_signal: float
+    breaker_signal: float
+    required_breaker_signal: float
+    distinct_breaker_owners: tuple[str, ...]
+    individually_convicting_breaker_ids: tuple[str, ...]
+    reason: str

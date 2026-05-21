@@ -1,6 +1,6 @@
 """Remediator — defuses artifacts the Smoking-Gun Critic flags `too_strong`.
 
-This slice ships two of the four PRD strategies:
+This module ships all four PRD strategies:
 
 - ``split``  — fan the artifact out into >= 2 owner-distinct fragments whose
   combined signal preserves corroboration for the bound proposition(s). Each
@@ -8,6 +8,16 @@ This slice ships two of the four PRD strategies:
   clears the smoking-gun bar.
 - ``dilute`` — keep a single artifact but soften / bury the damning span and
   scale its signal weight down below the bar.
+- ``redact_relocate`` — surgically remove the damning span from the flagged
+  artifact and re-emit it elsewhere as a weaker corroborator on a *different*
+  owner's device.
+- ``demote`` — mutate the artifact so its damning claim becomes subtly false /
+  misattributed (a contradicted lead). The true signal is re-emitted weakly on
+  a different owner; the demoted artifact is registered as a red herring and a
+  breaker bundle is scheduled for it (built by the Red-Herring & Breaker
+  Designer). ``demote`` returns a :class:`DemoteResult` rather than a plain
+  artifact list because it has these extra effects; the bounded re-critic loop
+  in ``remediation.run_critique_pass`` drives it.
 
 The strategy *selector* is injectable (seeded RNG in production, fixed in
 tests); the *transforms* are deterministic in shape given a strategy and a
@@ -17,6 +27,7 @@ candidate artifact (only the email writer's random filename suffix varies).
 from __future__ import annotations
 
 import random
+import re
 from dataclasses import dataclass
 from datetime import datetime
 from email.parser import BytesParser
@@ -27,11 +38,11 @@ from typing import Literal, Protocol
 from ..provenance.email_profile import EmailBrief, write_email
 from .llm_gateway import SMOKING_GUN_WEIGHT_THRESHOLD
 from .persona_registry import PersonaRegistry
-from .types import Artifact, Persona
+from .types import Artifact, Persona, Proposition
 
-Strategy = Literal["split", "dilute"]
+Strategy = Literal["split", "dilute", "redact_relocate", "demote"]
 
-STRATEGIES: tuple[Strategy, ...] = ("split", "dilute")
+STRATEGIES: tuple[Strategy, ...] = ("split", "dilute", "redact_relocate", "demote")
 
 # A diluted artifact keeps half its weight; two fragments each take half on a
 # split. Both land below SMOKING_GUN_WEIGHT_THRESHOLD (1.0), so the re-critic
@@ -132,6 +143,25 @@ def _recipient_for(registry: PersonaRegistry, owner_id: str) -> tuple[str, str]:
     raise ValueError("registry must have at least two personas to emit email")
 
 
+def _email_persona_and_device(registry: PersonaRegistry, *, exclude_id: str) -> tuple[Persona, str]:
+    """First email-capable persona (and its email device) other than ``exclude_id``."""
+    for persona in registry.personas():
+        if persona.id == exclude_id:
+            continue
+        for device in registry.devices_for(persona.id):
+            if device.profile == "email":
+                return persona, device.id
+    raise ValueError("registry must have a second email-capable persona to relocate to")
+
+
+_PROP_ID_SAFE = re.compile(r"[^a-zA-Z0-9_]+")
+
+
+def false_proposition_id_for(artifact: Artifact) -> str:
+    """Deterministic id for the red herring a ``demote`` of this artifact creates."""
+    return f"prop_rh_{_PROP_ID_SAFE.sub('_', artifact.id)}"
+
+
 def dilute(artifact: Artifact, registry: PersonaRegistry, *, disclaimer: str) -> list[Artifact]:
     """Soften / bury the damning span and scale the signal weight down.
 
@@ -217,6 +247,125 @@ def _chunk_body(body: str, n: int) -> list[str]:
     return [c if c else f"(fragment {i + 1} of {n})" for i, c in enumerate(chunks)]
 
 
+def redact_relocate(
+    artifact: Artifact, registry: PersonaRegistry, *, disclaimer: str
+) -> list[Artifact]:
+    """Remove the damning span and re-emit it elsewhere as a weaker corroborator.
+
+    The flagged artifact's body (which carries the damning span) is dropped
+    entirely and replaced with a mundane, non-dispositive note. The replacement
+    is emitted on a *different* owner's device and bound to the same
+    proposition(s), so the original owner no longer holds a smoking gun while
+    corroboration is preserved (weakly) on a new custodian.
+    """
+    parsed = _parse_email(artifact.payload)
+    new_owner, new_device_id = _email_persona_and_device(registry, exclude_id=artifact.owner_id)
+    relocated_body = (
+        "Following up on the earlier matter for the record. I can corroborate "
+        "the general timeline in broad strokes, but I did not personally witness "
+        "anything decisive and cannot speak to the specifics."
+    )
+    weight = artifact.signal_weight * DILUTE_FACTOR
+    return [
+        _write_artifact(
+            artifact_id=f"{artifact.id}~rdr",
+            owner=new_owner,
+            device_id=new_device_id,
+            recipients=(_recipient_for(registry, new_owner.id),),
+            subject=f"Fwd: {parsed.subject}",
+            body=relocated_body,
+            sent_at=artifact.acquisition_time,
+            bound_proposition_ids=artifact.bound_proposition_ids,
+            signal_weight=weight,
+            disclaimer=disclaimer,
+        )
+    ]
+
+
+@dataclass(frozen=True)
+class DemoteResult:
+    """Output of the ``demote`` transform.
+
+    - ``red_herring_support`` is the mutated artifact whose claim is now subtly
+      false / misattributed; it is registered against ``false_proposition``.
+    - ``true_signal`` re-emits the genuine signal weakly on a different owner so
+      the original true proposition keeps a corroborator.
+    - ``false_proposition`` is the contradicted lead; the Designer schedules a
+      breaker bundle to refute it.
+    """
+
+    red_herring_support: Artifact
+    true_signal: Artifact
+    false_proposition: Proposition
+
+
+def demote(
+    artifact: Artifact,
+    registry: PersonaRegistry,
+    *,
+    disclaimer: str,
+    false_proposition_id: str | None = None,
+    support_weight: float = DILUTE_FACTOR,
+) -> DemoteResult:
+    """Demote a flagged artifact to a refuted red herring.
+
+    The artifact is mutated so its damning claim becomes a misattributed (and
+    therefore false) lead, bound to a freshly minted false proposition. The
+    genuine signal is preserved weakly on a different owner's device.
+    """
+    parsed = _parse_email(artifact.payload)
+    owner = registry.get_persona(artifact.owner_id)
+    false_prop_id = false_proposition_id or false_proposition_id_for(artifact)
+
+    misattributed_body = (
+        "On reflection I think I had this muddled — it now looks like it was "
+        "someone else entirely, and on a different day. Disregard my earlier "
+        "read of it; I clearly mixed up the dates and the people involved."
+    )
+    support = _write_artifact(
+        artifact_id=f"{artifact.id}~dem",
+        owner=owner,
+        device_id=artifact.device_id,
+        recipients=parsed.recipients or (_recipient_for(registry, owner.id),),
+        subject=f"Re: {parsed.subject} (correction)",
+        body=misattributed_body,
+        sent_at=artifact.acquisition_time,
+        bound_proposition_ids=(false_prop_id,),
+        signal_weight=min(artifact.signal_weight, 1.0) * support_weight,
+        disclaimer=disclaimer,
+    )
+
+    true_owner, true_device_id = _email_persona_and_device(registry, exclude_id=artifact.owner_id)
+    true_signal = _write_artifact(
+        artifact_id=f"{artifact.id}~true",
+        owner=true_owner,
+        device_id=true_device_id,
+        recipients=(_recipient_for(registry, true_owner.id),),
+        subject=f"Re: {parsed.subject}",
+        body=(
+            "For what it's worth I can quietly corroborate the original account; "
+            "nothing dramatic on my end, just one more small data point."
+        ),
+        sent_at=artifact.acquisition_time,
+        bound_proposition_ids=artifact.bound_proposition_ids,
+        signal_weight=min(artifact.signal_weight, 1.0) * DILUTE_FACTOR / 2,
+        disclaimer=disclaimer,
+    )
+
+    false_proposition = Proposition(
+        id=false_prop_id,
+        text=(
+            "Contradicted lead: the case is best explained by a misattributed "
+            f"actor/timeline suggested by artifact {artifact.id}."
+        ),
+    )
+    return DemoteResult(
+        red_herring_support=support,
+        true_signal=true_signal,
+        false_proposition=false_proposition,
+    )
+
+
 def remediate(
     artifact: Artifact,
     strategy: Strategy,
@@ -224,12 +373,20 @@ def remediate(
     *,
     disclaimer: str,
 ) -> list[Artifact]:
-    # dilute() and split() are email-shaped operations; all other profiles
-    # (pdf, xlsx_ledger, jpeg, sms, system_log_csv) pass through unchanged.
+    # These are email-shaped operations; all other profiles (pdf, xlsx_ledger,
+    # jpeg, sms, system_log_csv) pass through unchanged.
     if artifact.profile != "email":
         return [artifact]
     if strategy == "split":
         return split(artifact, registry, disclaimer=disclaimer)
     if strategy == "dilute":
         return dilute(artifact, registry, disclaimer=disclaimer)
+    if strategy == "redact_relocate":
+        return redact_relocate(artifact, registry, disclaimer=disclaimer)
+    if strategy == "demote":
+        # demote has red-herring side effects and a richer return; the critique
+        # pass calls demote() directly. Defuse here so a bare remediate() call
+        # never silently leaves a smoking gun at full strength.
+        result = demote(artifact, registry, disclaimer=disclaimer)
+        return [result.red_herring_support, result.true_signal]
     raise ValueError(f"unknown remediation strategy: {strategy!r}")
