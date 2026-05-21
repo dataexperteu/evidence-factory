@@ -14,7 +14,6 @@ from __future__ import annotations
 import csv
 import hashlib
 import io
-import json
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -330,4 +329,6 @@ def test_fallback_entries_from_text_content(
     # All persona_ids must be valid registry personas
     valid = set(registry.persona_names())
     for row in rows:
-        assert row["persona_id"] in valid, f"generated persona_id {row['persona_id']!r} not in registry"
+        assert row["persona_id"] in valid, (
+            f"generated persona_id {row['persona_id']!r} not in registry"
+        )
