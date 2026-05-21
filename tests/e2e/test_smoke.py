@@ -301,6 +301,70 @@ def test_smoke_two_runs_produce_different_corpora():
     assert z1 != z2
 
 
+def _disclaimer_present(path: str, payload: bytes, disclaimer: str) -> bool:
+    """Recover the watermark from the artifact's format-appropriate field."""
+    if path.endswith(".eml"):
+        import mailparser
+
+        parsed = mailparser.parse_from_bytes(payload)
+        headers = {k.lower(): v for k, v in parsed.headers.items()}
+        return disclaimer in headers.get("x-synthetic-evidence", "")
+    if path.endswith(".pdf"):
+        import pypdf
+
+        reader = pypdf.PdfReader(io.BytesIO(payload))
+        return disclaimer in (reader.metadata.get("/Keywords", "") or "")
+    if path.endswith(".jpg"):
+        import piexif
+        import piexif.helper
+
+        exif = piexif.load(payload)
+        raw = exif["Exif"].get(piexif.ExifIFD.UserComment)
+        return raw is not None and piexif.helper.UserComment.load(raw) == disclaimer
+    if path.endswith(".xlsx"):
+        import openpyxl
+
+        wb = openpyxl.load_workbook(io.BytesIO(payload), read_only=True)
+        try:
+            return wb.properties.keywords == disclaimer
+        finally:
+            wb.close()
+    if path.endswith(".csv"):
+        first_line = payload.decode("utf-8").splitlines()[0]
+        return first_line.startswith("#") and disclaimer in first_line
+    if path.endswith(".txt"):
+        return disclaimer in payload.decode("utf-8")
+    return False
+
+
+def test_smoke_every_artifact_carries_verifiable_disclaimer():
+    """Slice 11: every emitted corpus artifact carries the synthetic-evidence
+    disclaimer in a format-appropriate field, and /corpus/MANIFEST.txt states
+    it in plain text."""
+    from api.pipeline.attestation import SYNTHETIC_EVIDENCE_DISCLAIMER
+
+    zip_bytes = _run()
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        names = zf.namelist()
+        assert "corpus/MANIFEST.txt" in names
+        manifest_txt = zf.read("corpus/MANIFEST.txt").decode("utf-8")
+        assert SYNTHETIC_EVIDENCE_DISCLAIMER in manifest_txt
+
+        artifact_paths = [
+            n
+            for n in names
+            if n.startswith("corpus/")
+            and n not in ("corpus/manifest.csv", "corpus/MANIFEST.txt")
+            and "/" in n.removeprefix("corpus/")
+        ]
+        assert artifact_paths, "corpus has no artifacts"
+        for path in artifact_paths:
+            payload = zf.read(path)
+            assert _disclaimer_present(path, payload, SYNTHETIC_EVIDENCE_DISCLAIMER), (
+                f"artifact {path} is missing the synthetic-evidence disclaimer"
+            )
+
+
 def test_smoke_url_path_extracts_and_runs_pipeline():
     """Slice 2: URL intake path exercises trafilatura extraction against a
     local fixture HTTP server serving the HTML article fixture."""

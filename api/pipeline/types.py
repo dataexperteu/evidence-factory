@@ -93,6 +93,7 @@ class ClosureResult:
     ok: bool
     gaps: list[ClosureGap] = field(default_factory=list)
     red_herring_gaps: list[RedHerringGap] = field(default_factory=list)
+    dominance_gaps: list[DominanceGap] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -101,6 +102,25 @@ class ClosureGap:
     required: int
     observed: int
     distinct_owners: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class DominanceGap:
+    """A contested alternative that comes within the dominance margin of truth.
+
+    ``alternative_id`` is the contested (false) proposition; ``alternative_support``
+    is its aggregate signal; ``truth_support`` is the true account's aggregate
+    signal; ``required_max_support`` is the ceiling an alternative must stay below
+    (``truth_support * (1 - margin)``) and ``margin_shortfall`` is how far the
+    alternative breaches that ceiling.
+    """
+
+    alternative_id: str
+    truth_support: float
+    alternative_support: float
+    required_max_support: float
+    margin_shortfall: float
+    reason: str
 
 
 @dataclass(frozen=True)

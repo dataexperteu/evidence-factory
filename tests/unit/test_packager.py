@@ -131,3 +131,19 @@ def test_manifest_csv_round_trips():
     rows = list(reader)
     assert rows[0] == ["acquisition_time", "owner", "device", "path", "sha256"]
     assert len(rows) == 3  # header + 2 artifacts
+
+
+def test_corpus_manifest_txt_contains_disclaimer_in_plain_text():
+    zip_bytes = build_zip(_make_input())
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        names = zf.namelist()
+        assert "corpus/MANIFEST.txt" in names
+        text = zf.read("corpus/MANIFEST.txt").decode("utf-8")
+    assert "SYNTHETIC EVIDENCE — demo" in text
+    # It is a top-level corpus file (not nested under a custodian folder).
+    assert "corpus/MANIFEST.txt".count("/") == 1
+
+
+def test_manifest_txt_does_not_break_solution_separation():
+    zip_bytes = build_zip(_make_input())
+    assert_separation(zip_bytes)

@@ -1,4 +1,4 @@
-"""Closure Verifier — corroboration lower bound + red-herring invariant.
+"""Closure Verifier — corroboration lower bound + red-herring + dominance.
 
 PRD invariants enforced here:
 
@@ -6,7 +6,10 @@ PRD invariants enforced here:
   corroborating artifacts;
 - *red-herring invariant* — every red herring's breaker bundle must refute it
   *in aggregate* by a configurable margin, no breaker artifact may convict on
-  its own, and the bundle must be owner-distinct with at least two artifacts.
+  its own, and the bundle must be owner-distinct with at least two artifacts;
+- *dominance* — the true proposition graph must remain the uniquely
+  best-supported account: every contested alternative's aggregate support must
+  stay a configurable margin below the truth's aggregate support.
 
 This module is the correctness backbone — characterization tests pin the
 gap-report shape so subsequent slices cannot drift the contract silently.
@@ -16,10 +19,18 @@ from __future__ import annotations
 
 from .llm_gateway import SMOKING_GUN_WEIGHT_THRESHOLD
 from .signal_ledger import SignalLedger
-from .types import ClosureGap, ClosureResult, PropositionGraph, RedHerring, RedHerringGap
+from .types import (
+    ClosureGap,
+    ClosureResult,
+    DominanceGap,
+    PropositionGraph,
+    RedHerring,
+    RedHerringGap,
+)
 
 DEFAULT_BREAKER_MARGIN = 0.5
 MIN_BREAKER_OWNERS = 2
+DEFAULT_DOMINANCE_MARGIN = 0.5
 
 
 def verify_closure(
@@ -29,19 +40,25 @@ def verify_closure(
     *,
     red_herrings: list[RedHerring] | None = None,
     breaker_margin: float = DEFAULT_BREAKER_MARGIN,
+    dominance_margin: float = DEFAULT_DOMINANCE_MARGIN,
     smoking_gun_threshold: float = SMOKING_GUN_WEIGHT_THRESHOLD,
 ) -> ClosureResult:
     """Return pass/fail + structured gap report.
 
     A corroboration gap is emitted for every proposition whose owner-distinct
     corroborator count is below `min_owner_distinct`. A red-herring gap is
-    emitted for every red herring whose breaker bundle fails the invariant.
-    Both lists are sorted by proposition id so reports are stable across runs.
+    emitted for every red herring whose breaker bundle fails the invariant. A
+    dominance gap is emitted for every contested alternative (red herring or
+    otherwise) whose aggregate support comes within `dominance_margin` of the
+    true account's aggregate support. All lists are sorted by proposition id so
+    reports are stable across runs.
     """
     if min_owner_distinct < 1:
         raise ValueError("min_owner_distinct must be >= 1")
     if breaker_margin < 0:
         raise ValueError("breaker_margin must be >= 0")
+    if not 0 <= dominance_margin < 1:
+        raise ValueError("dominance_margin must be in [0, 1)")
     gaps: list[ClosureGap] = []
     for prop in graph.propositions:
         owners = ledger.distinct_owners_for(prop.id)
@@ -63,7 +80,54 @@ def verify_closure(
             rh_gaps.append(gap)
     rh_gaps.sort(key=lambda g: g.proposition_id)
 
-    return ClosureResult(ok=not gaps and not rh_gaps, gaps=gaps, red_herring_gaps=rh_gaps)
+    truth_support = _truth_support(graph, ledger)
+    dom_gaps: list[DominanceGap] = []
+    for rh in red_herrings or []:
+        dom_gap = _check_dominance(rh, truth_support, dominance_margin)
+        if dom_gap is not None:
+            dom_gaps.append(dom_gap)
+    dom_gaps.sort(key=lambda g: g.alternative_id)
+
+    return ClosureResult(
+        ok=not gaps and not rh_gaps and not dom_gaps,
+        gaps=gaps,
+        red_herring_gaps=rh_gaps,
+        dominance_gaps=dom_gaps,
+    )
+
+
+def _truth_support(graph: PropositionGraph, ledger: SignalLedger) -> float:
+    """Aggregate signal supporting the true account.
+
+    Sum of signal weights of every ledger entry that corroborates at least one
+    true proposition. An artifact bound to several true propositions counts
+    once (entries are per-artifact), so this is the account's total signal mass.
+    """
+    truth_ids = {p.id for p in graph.propositions}
+    return sum(
+        e.signal_weight for e in ledger.entries() if truth_ids.intersection(e.proposition_ids)
+    )
+
+
+def _check_dominance(
+    rh: RedHerring, truth_support: float, dominance_margin: float
+) -> DominanceGap | None:
+    alt_support = rh.support_signal
+    ceiling = truth_support * (1.0 - dominance_margin)
+    if alt_support <= ceiling:
+        return None
+    return DominanceGap(
+        alternative_id=rh.proposition.id,
+        truth_support=truth_support,
+        alternative_support=alt_support,
+        required_max_support=ceiling,
+        margin_shortfall=alt_support - ceiling,
+        reason=(
+            f"contested alternative support {alt_support:.3f} comes within "
+            f"dominance margin {dominance_margin} of truth support "
+            f"{truth_support:.3f} (must stay <= {ceiling:.3f})"
+        ),
+    )
 
 
 def _check_red_herring(

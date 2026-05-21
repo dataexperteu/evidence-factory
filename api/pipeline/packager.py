@@ -108,6 +108,10 @@ def build_zip(inp: PackagerInput) -> bytes:
             writer.writerow(row)
         zf.writestr("corpus/manifest.csv", csv_buf.getvalue())
 
+        # corpus/MANIFEST.txt — plain-text synthetic-evidence disclaimer that a
+        # reader sees without parsing any artifact's format-specific metadata.
+        zf.writestr("corpus/MANIFEST.txt", _manifest_txt(inp.disclaimer))
+
         # SOLUTION/ pack
         zf.writestr(
             "SOLUTION/truth_outline.md",
@@ -156,6 +160,16 @@ def build_zip(inp: PackagerInput) -> bytes:
         )
 
     return buf.getvalue()
+
+
+def _manifest_txt(disclaimer: str) -> str:
+    return (
+        "SYNTHETIC EVIDENCE\n"
+        "==================\n\n"
+        f"{disclaimer}\n\n"
+        "Every artifact in this corpus is synthetic and carries the same "
+        "disclaimer stamped into a format-appropriate metadata field.\n"
+    )
 
 
 def _artifact_ref(art: Artifact) -> dict:

@@ -50,13 +50,16 @@ def _rational_deg(v: float) -> tuple[tuple[int, int], tuple[int, int], tuple[int
 def write_jpeg(brief: JpegBrief, *, disclaimer: str) -> WrittenJpeg:
     """Serialise a JpegBrief to JPEG bytes with a valid EXIF block.
 
-    `disclaimer` is stamped into ImageDescription so every artifact carries
-    the synthetic-evidence label.
+    `disclaimer` is stamped into the EXIF ``UserComment`` field (the
+    format-appropriate watermark slot) and mirrored into ``ImageDescription``
+    so every artifact carries the synthetic-evidence label whichever tag a
+    reader inspects.
     """
     if brief.timestamp.tzinfo is None:
         raise ValueError("timestamp must be timezone-aware")
 
     import piexif
+    import piexif.helper
     from PIL import Image, ImageDraw, ImageFont
 
     width, height = 320, 240
@@ -79,6 +82,9 @@ def write_jpeg(brief: JpegBrief, *, disclaimer: str) -> WrittenJpeg:
         "Exif": {
             piexif.ExifIFD.DateTimeOriginal: dt_str.encode(),
             piexif.ExifIFD.DateTimeDigitized: dt_str.encode(),
+            piexif.ExifIFD.UserComment: piexif.helper.UserComment.dump(
+                disclaimer, encoding="unicode"
+            ),
         },
         "GPS": {},
         "1st": {},

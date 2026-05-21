@@ -55,9 +55,10 @@ def write_xlsx_ledger(brief: XlsxLedgerBrief, *, disclaimer: str) -> WrittenXlsx
     """Serialise an XlsxLedgerBrief to an .xlsx workbook byte-string.
 
     Core metadata is set deterministically from the brief so SHA-256 is stable
-    across two writes given identical inputs.  `disclaimer` is stored as a
-    named range comment so the chain-of-custody manifest and the file both
-    carry it.
+    across two writes given identical inputs.  `disclaimer` is stored in the
+    workbook ``keywords`` core property (the format-appropriate watermark slot)
+    and mirrored into ``description`` so the chain-of-custody manifest and the
+    file both carry it.
     """
     if brief.created_at.tzinfo is None:
         raise ValueError("created_at must be timezone-aware")
@@ -85,6 +86,7 @@ def write_xlsx_ledger(brief: XlsxLedgerBrief, *, disclaimer: str) -> WrittenXlsx
     wb.properties.modified = modified_naive
     wb.properties.lastModifiedBy = last_modified_by
     wb.properties.description = disclaimer
+    wb.properties.keywords = disclaimer
 
     if brief.headers:
         ws.append(list(brief.headers))

@@ -29,15 +29,44 @@ class Attestation:
         )
 
 
+@dataclass(frozen=True)
+class CaseContext:
+    """Per-run context the Attestation Gate seals after operator attestation.
+
+    Carries the operator attestation plus the synthetic-evidence watermark the
+    Packager stamps into every artifact and the top-level ``MANIFEST.txt``.
+    """
+
+    attestation: Attestation
+    synthetic_evidence: bool
+    disclaimer: str
+
+
 class AttestationRequired(Exception):
     pass
 
 
-def gate(checked: bool, *, operator_label: str = "anonymous-operator") -> Attestation:
+def gate(
+    checked: bool,
+    *,
+    operator_label: str = "anonymous-operator",
+    disclaimer: str = SYNTHETIC_EVIDENCE_DISCLAIMER,
+) -> CaseContext:
+    """Record the operator attestation and set the synthetic-evidence
+    disclaimer field on the case context.
+
+    Raises ``AttestationRequired`` unless the operator has attested authorised
+    use of any real-people / in-copyright source.
+    """
     if not checked:
         raise AttestationRequired("operator must attest authorised use before generation")
-    return Attestation(
+    attestation = Attestation(
         checked=True,
         attested_at=datetime.now(UTC),
         operator_label=operator_label,
+    )
+    return CaseContext(
+        attestation=attestation,
+        synthetic_evidence=True,
+        disclaimer=disclaimer,
     )
