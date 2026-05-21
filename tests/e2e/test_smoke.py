@@ -171,6 +171,25 @@ def test_smoke_url_path_extracts_and_runs_pipeline():
     server.server_close()
 
 
+def test_smoke_xlsx_artifacts_present_and_parseable():
+    """Slice 5: at least one .xlsx artifact exists in the corpus and parses cleanly."""
+    import io as _io
+
+    import openpyxl
+
+    zip_bytes = _run()
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        xlsx_paths = [
+            n for n in zf.namelist() if n.startswith("corpus/") and n.endswith(".xlsx")
+        ]
+        assert xlsx_paths, "expected at least one .xlsx artifact in corpus"
+        for path in xlsx_paths:
+            payload = zf.read(path)
+            wb = openpyxl.load_workbook(_io.BytesIO(payload), read_only=True)
+            assert wb.sheetnames, f"workbook at {path} has no sheets"
+            wb.close()
+
+
 def _slug(s: str) -> str:
     import re
 

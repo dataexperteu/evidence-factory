@@ -50,11 +50,12 @@ class PersonaRegistry:
 
 
 def default_registry() -> PersonaRegistry:
-    """The tracer-bullet cast: four personas, one email device each.
+    """The tracer-bullet cast: four personas, one device each.
 
-    Four owners gives the Closure Verifier headroom for owner-distinct
-    corroboration thresholds up to 4. Identifiers are stable so the e2e
-    smoke test can assert on them.
+    Holmes owns a workstation (xlsx_ledger profile); the other three own email
+    devices.  Four owners gives the Closure Verifier headroom for
+    owner-distinct corroboration thresholds up to 4.  Identifiers are stable
+    so the e2e smoke test can assert on them.
     """
     personas = [
         Persona(
@@ -75,7 +76,12 @@ def default_registry() -> PersonaRegistry:
         ),
     ]
     devices = [
-        Device(id="d_holmes_mail", owner_id="p_holmes", label="holmes-laptop", profile="email"),
+        Device(
+            id="d_holmes_xl",
+            owner_id="p_holmes",
+            label="holmes-workstation",
+            profile="xlsx_ledger",
+        ),
         Device(id="d_watson_mail", owner_id="p_watson", label="watson-laptop", profile="email"),
         Device(id="d_hudson_mail", owner_id="p_hudson", label="hudson-tablet", profile="email"),
         Device(
