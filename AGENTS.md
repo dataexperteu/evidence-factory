@@ -4,6 +4,17 @@ Synthetic digital-evidence generator for showcasing AI digital-evidence analysis
 
 See `PRD.md` for the full design.
 
+## Canonical project structure — extend, never re-scaffold
+
+The product lives in **`api/`** (FastAPI app + `api/pipeline/` + per-profile
+modules under `api/provenance/`) and **`ui-app/`** (the SPA). All slices extend
+this tree. Do **not** create a parallel top-level package (e.g. `backend/`,
+`src/`) or re-scaffold the project — if something seems missing, add it inside
+`api/`/`ui-app/`. A provenance profile is a **per-profile module** under
+`api/provenance/` (see `api/provenance/email_profile.py`), not a branch in a
+monolithic catalog. The only expected top-level dirs are `api/`, `ui-app/`,
+`tests/`, `docs/`, and `scripts/`.
+
 ## Agent skills
 
 ### Issue tracker
