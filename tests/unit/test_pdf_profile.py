@@ -167,12 +167,8 @@ def test_emitter_raises_when_pdf_device_not_owned_by_persona():
     holmes = Persona(id="p_h", display_name="Holmes", email_address="h@b.example")
     watson = Persona(id="p_w", display_name="Watson", email_address="w@b.example")
     # watson_pdf_dev is owned by watson, not holmes
-    watson_pdf_dev = Device(
-        id="d_w_pdf", owner_id="p_w", label="watson-ws", profile="pdf"
-    )
-    holmes_email_dev = Device(
-        id="d_h_mail", owner_id="p_h", label="holmes-laptop", profile="email"
-    )
+    watson_pdf_dev = Device(id="d_w_pdf", owner_id="p_w", label="watson-ws", profile="pdf")
+    holmes_email_dev = Device(id="d_h_mail", owner_id="p_h", label="holmes-laptop", profile="email")
     reg = PersonaRegistry([holmes, watson], [holmes_email_dev, watson_pdf_dev])
 
     # Craft an event that assigns watson's pdf device to holmes (cross-actor)

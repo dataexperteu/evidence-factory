@@ -148,9 +148,7 @@ def test_smoke_pdf_artifacts_are_owner_bound_to_registry():
     registry = default_registry()
     valid_persona_slugs = {_slug(p.display_name): p.id for p in registry.personas()}
     valid_device_labels = {
-        d.label: d.owner_id
-        for p in registry.personas()
-        for d in registry.devices_for(p.id)
+        d.label: d.owner_id for p in registry.personas() for d in registry.devices_for(p.id)
     }
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
         pdf_paths = [n for n in zf.namelist() if n.startswith("corpus/") and n.endswith(".pdf")]
