@@ -30,10 +30,12 @@ from sse_starlette.sse import EventSourceResponse
 from .pipeline.attestation import AttestationRequired
 from .pipeline.llm_gateway import LLMGateway
 from .pipeline.orchestrator import (
+    DifficultyPreset,
     ProgressEvent,
     RunResult,
     RunSettings,
     run_pipeline,
+    settings_for_preset,
 )
 from .pipeline.source_intake import IntakeError, ingest_upload, ingest_url
 
@@ -48,6 +50,15 @@ class StartRunRequest(BaseModel):
     source_url: str | None = None
     attestation_checked: bool
     operator_label: str | None = None
+    difficulty: DifficultyPreset = "medium"
+    # Optional per-dial overrides; when provided, take precedence over the preset.
+    owners_per_proposition: int | None = None
+    min_owner_distinct: int | None = None
+    fragmentation_factor: int | None = None
+    dominance_margin: float | None = None
+    target_artifact_count: int | None = None
+    red_herring_count: int | None = None
+    noise_count: int | None = None
 
 
 class PreviewUrlRequest(BaseModel):
@@ -78,8 +89,13 @@ class _JobStore:
         return self._runs.get(run_id)
 
 
-def _make_drive(state: _RunState, source_text: str, attestation_checked: bool) -> None:
-    settings = RunSettings()
+def _make_drive(
+    state: _RunState,
+    source_text: str,
+    attestation_checked: bool,
+    settings: RunSettings | None = None,
+) -> None:
+    settings = settings or RunSettings()
     gateway = LLMGateway()
 
     async def drive() -> None:
@@ -149,7 +165,7 @@ def create_app() -> FastAPI:
 
         run_id = _gen_run_id()
         state = await store.create(run_id)
-        _make_drive(state, text, req.attestation_checked)
+        _make_drive(state, text, req.attestation_checked, settings=_settings_from_request(req))
         return {"run_id": run_id}
 
     @app.post("/api/runs/upload")
@@ -217,6 +233,26 @@ def create_app() -> FastAPI:
             return FileResponse(UI_DIST / "index.html")
 
     return app
+
+
+def _settings_from_request(req: StartRunRequest) -> RunSettings:
+    """Build RunSettings from preset + optional per-dial overrides."""
+    s = settings_for_preset(req.difficulty)
+    if req.owners_per_proposition is not None:
+        s.owners_per_proposition = req.owners_per_proposition
+    if req.min_owner_distinct is not None:
+        s.min_owner_distinct = req.min_owner_distinct
+    if req.fragmentation_factor is not None:
+        s.fragmentation_factor = req.fragmentation_factor
+    if req.dominance_margin is not None:
+        s.dominance_margin = req.dominance_margin
+    if req.target_artifact_count is not None:
+        s.target_artifact_count = req.target_artifact_count
+    if req.red_herring_count is not None:
+        s.red_herring_count = req.red_herring_count
+    if req.noise_count is not None:
+        s.noise_count = req.noise_count
+    return s
 
 
 def _gen_run_id() -> str:

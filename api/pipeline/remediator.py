@@ -372,13 +372,14 @@ def remediate(
     registry: PersonaRegistry,
     *,
     disclaimer: str,
+    fragments: int = SPLIT_FRAGMENTS,
 ) -> list[Artifact]:
     # These are email-shaped operations; all other profiles (pdf, xlsx_ledger,
     # jpeg, sms, system_log_csv) pass through unchanged.
     if artifact.profile != "email":
         return [artifact]
     if strategy == "split":
-        return split(artifact, registry, disclaimer=disclaimer)
+        return split(artifact, registry, disclaimer=disclaimer, fragments=fragments)
     if strategy == "dilute":
         return dilute(artifact, registry, disclaimer=disclaimer)
     if strategy == "redact_relocate":
