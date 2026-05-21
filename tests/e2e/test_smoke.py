@@ -33,7 +33,7 @@ from pathlib import Path
 import mailparser
 import pypdf
 
-from api.pipeline.orchestrator import run_sync
+from api.pipeline.orchestrator import RunSettings, run_sync
 from api.pipeline.persona_registry import default_registry
 from api.pipeline.source_intake import ingest_url
 
@@ -43,7 +43,10 @@ HTML_FIXTURE = Path(__file__).parent / "fixtures" / "sample_article.html"
 
 def _run() -> bytes:
     paste = FIXTURE.read_text(encoding="utf-8")
-    events, result = run_sync(paste, attestation_checked=True)
+    # 5 owners/proposition → cycling slots 0-4 produce email, pdf, jpeg, xlsx, sms;
+    # system actors add system_log_csv. All six profiles represented in one run.
+    settings = RunSettings(owners_per_proposition=5)
+    events, result = run_sync(paste, attestation_checked=True, settings=settings)
     failed = [e for e in events if e.status == "failed"]
     assert not failed, f"pipeline emitted failure events: {failed}"
     assert result is not None, "pipeline did not produce a result"

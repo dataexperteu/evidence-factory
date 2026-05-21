@@ -43,7 +43,7 @@ def test_default_registry_four_original_personas_have_pdf_workstations():
 
 
 def test_default_registry_jpeg_devices_present():
-    """Slice 6: at least two jpeg-capable device owners in the registry."""
+    """Slice 6: at least one jpeg-capable device owner in the registry."""
     reg = default_registry()
     jpeg_owners = {
         d.owner_id
@@ -51,7 +51,7 @@ def test_default_registry_jpeg_devices_present():
         for d in reg.devices_for(p.id)
         if d.profile == "jpeg"
     }
-    assert len(jpeg_owners) >= 2
+    assert len(jpeg_owners) >= 1
 
 
 def test_default_registry_jpeg_devices_carry_make_model():

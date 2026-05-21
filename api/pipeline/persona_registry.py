@@ -124,23 +124,17 @@ class PersonaRegistry:
 def default_registry() -> PersonaRegistry:
     """Merged cast: six personas, two system actors, all profile devices.
 
-    Persona roster:
-      - p_holmes, p_watson, p_hudson, p_lestrade — original four (email + pdf + sms)
-      - p_irene, p_mycroft — added by slice-6 (jpeg devices)
+    Persona roster (index order matters for event_graph cycling):
+      0  p_holmes  — email / pdf / sms
+      1  p_watson  — email / pdf / sms
+      2  p_irene   — jpeg phone
+      3  p_mycroft — xlsx_ledger workstation
+      4  p_hudson  — email / sms / pdf   (sms at index 1 → slot 4 hits sms)
+      5  p_lestrade — email / pdf
 
-    System actors:
-      - sys_bldg_access (access_log schema)
-      - sys_pbx (cdr schema)
-
-    Device layout per persona:
-      - <id>_mail     : email
-      - <id>_workstation : pdf
-      - <id>_phone (where applicable) : sms or jpeg
-
-    The registry index order matters for build_events: personas()[0..N-1] are
-    used round-robin per proposition.  Placing p_irene/p_mycroft at indices 2
-    and 3 means owners_per_proposition=3 selects Holmes(email), Watson(email),
-    Irene(jpeg) — mixing profiles by construction.
+    With owners_per_proposition=5 the cycling produces one artifact per
+    slot: email(0), pdf(1), jpeg(2), xlsx_ledger(3), sms(4).
+    System actors add system_log_csv, covering all six profiles.
     """
     personas = [
         Persona(
@@ -225,18 +219,16 @@ def default_registry() -> PersonaRegistry:
             model="iPhone 15 Pro",
             gps_capable=True,
         ),
-        # Mycroft — jpeg camera
+        # Mycroft — xlsx_ledger workstation (slot 3 in owners_per_proposition=5 cycling)
         Device(
-            id="d_mycroft_camera",
+            id="d_mycroft_workstation",
             owner_id="p_mycroft",
-            label="mycroft-camera",
-            profile="jpeg",
-            make="Canon",
-            model="EOS R5",
-            gps_capable=False,
+            label="mycroft-workstation",
+            profile="xlsx_ledger",
         ),
-        # Hudson — email + pdf
+        # Hudson — email + sms + pdf  (sms at index 1 so devices[4%3=1]=sms in slot 4)
         Device(id="d_hudson_mail", owner_id="p_hudson", label="hudson-tablet", profile="email"),
+        Device(id="d_hudson_phone", owner_id="p_hudson", label="hudson-phone", profile="sms"),
         Device(
             id="d_hudson_workstation",
             owner_id="p_hudson",
