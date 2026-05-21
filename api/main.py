@@ -1,13 +1,15 @@
-"""FastAPI app for Evidence Factory slice 1.
+"""FastAPI app for Evidence Factory (slice 2: intake modes).
 
 Endpoints:
-- POST /api/runs                start a run (returns {run_id})
-- GET  /api/runs/{id}/events    Server-Sent Events progress stream
-- GET  /api/runs/{id}/zip       download the finished corpus zip
-- GET  /healthz                 liveness
-- GET  /                        serve the built SPA (if ui-app/dist exists)
+- POST /api/runs               start a run from paste or URL (JSON body)
+- POST /api/runs/upload        start a run from a file upload (multipart)
+- POST /api/preview-url        fetch a URL and return a one-line text preview
+- GET  /api/runs/{id}/events   Server-Sent Events progress stream
+- GET  /api/runs/{id}/zip      download the finished corpus zip
+- GET  /healthz                liveness
+- GET  /                       serve the built SPA (if ui-app/dist exists)
 
-Jobs are held in process memory — fine for a single-tenant tracer bullet.
+Jobs are held in process memory — fine for a single-tenant local tool.
 """
 
 from __future__ import annotations
@@ -19,7 +21,7 @@ from collections.abc import AsyncIterator
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
@@ -33,6 +35,7 @@ from .pipeline.orchestrator import (
     RunSettings,
     run_pipeline,
 )
+from .pipeline.source_intake import IntakeError, ingest_upload, ingest_url
 
 LOG = logging.getLogger("evidence_factory.api")
 logging.basicConfig(level=logging.INFO)
@@ -41,9 +44,14 @@ UI_DIST = Path(__file__).resolve().parent.parent / "ui-app" / "dist"
 
 
 class StartRunRequest(BaseModel):
-    source_paste: str
+    source_paste: str | None = None
+    source_url: str | None = None
     attestation_checked: bool
     operator_label: str | None = None
+
+
+class PreviewUrlRequest(BaseModel):
+    url: str
 
 
 @dataclass
@@ -70,54 +78,97 @@ class _JobStore:
         return self._runs.get(run_id)
 
 
+def _make_drive(state: _RunState, source_text: str, attestation_checked: bool) -> None:
+    settings = RunSettings()
+    gateway = LLMGateway()
+
+    async def drive() -> None:
+        try:
+            async for event, maybe_result in run_pipeline(
+                source_text,
+                attestation_checked,
+                settings=settings,
+                gateway=gateway,
+            ):
+                state.events.append(event)
+                if maybe_result is not None:
+                    state.result = maybe_result
+                if event.status == "failed":
+                    state.failed = True
+                    state.failure_reason = json.dumps(event.detail)
+        except AttestationRequired as e:
+            state.failed = True
+            state.failure_reason = str(e)
+        except Exception as e:  # pragma: no cover - defensive
+            LOG.exception("pipeline crashed")
+            state.failed = True
+            state.failure_reason = f"internal error: {e}"
+        finally:
+            state.completed.set()
+
+    asyncio.create_task(drive())
+
+
 def create_app() -> FastAPI:
-    app = FastAPI(title="Evidence Factory (slice 1 tracer bullet)")
+    app = FastAPI(title="Evidence Factory")
     store = _JobStore()
 
     @app.get("/healthz")
     async def healthz() -> dict:
         return {"ok": True}
 
+    @app.post("/api/preview-url")
+    async def preview_url(req: PreviewUrlRequest) -> dict:
+        """Fetch a URL and return the first line of extracted text as a preview."""
+        try:
+            source = await ingest_url(req.url)
+        except IntakeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        first_line = source.body.split("\n", 1)[0][:300]
+        return {"preview": first_line, "char_count": source.char_count}
+
     @app.post("/api/runs")
     async def start_run(req: StartRunRequest) -> dict:
-        if not req.source_paste.strip():
-            raise HTTPException(status_code=400, detail="source_paste is empty")
+        if req.source_paste and req.source_url:
+            raise HTTPException(
+                status_code=400, detail="supply either source_paste or source_url, not both"
+            )
+        if not req.source_paste and not req.source_url:
+            raise HTTPException(status_code=400, detail="source_paste or source_url is required")
+
+        if req.source_url:
+            try:
+                source = await ingest_url(req.source_url)
+            except IntakeError as exc:
+                raise HTTPException(status_code=400, detail=str(exc)) from exc
+            text = source.body
+        else:
+            text = req.source_paste or ""
+            if not text.strip():
+                raise HTTPException(status_code=400, detail="source_paste is empty")
+
+        run_id = _gen_run_id()
+        state = await store.create(run_id)
+        _make_drive(state, text, req.attestation_checked)
+        return {"run_id": run_id}
+
+    @app.post("/api/runs/upload")
+    async def start_run_upload(
+        file: UploadFile,
+        attestation_checked: bool = Form(...),
+        operator_label: str | None = Form(None),
+    ) -> dict:
+        content = await file.read()
+        filename = file.filename or "upload.txt"
         try:
-            # Run synchronously inside an async task; the orchestrator is
-            # async-native and yields after each stage.
-            settings = RunSettings()
-            gateway = LLMGateway()
-            run_id = _gen_run_id()
-            state = await store.create(run_id)
+            source = ingest_upload(content, filename)
+        except IntakeError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-            async def drive() -> None:
-                try:
-                    async for event, maybe_result in run_pipeline(
-                        req.source_paste,
-                        req.attestation_checked,
-                        settings=settings,
-                        gateway=gateway,
-                    ):
-                        state.events.append(event)
-                        if maybe_result is not None:
-                            state.result = maybe_result
-                        if event.status == "failed":
-                            state.failed = True
-                            state.failure_reason = json.dumps(event.detail)
-                except AttestationRequired as e:
-                    state.failed = True
-                    state.failure_reason = str(e)
-                except Exception as e:  # pragma: no cover - defensive
-                    LOG.exception("pipeline crashed")
-                    state.failed = True
-                    state.failure_reason = f"internal error: {e}"
-                finally:
-                    state.completed.set()
-
-            asyncio.create_task(drive())
-            return {"run_id": run_id}
-        except AttestationRequired as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
+        run_id = _gen_run_id()
+        state = await store.create(run_id)
+        _make_drive(state, source.body, attestation_checked)
+        return {"run_id": run_id}
 
     @app.get("/api/runs/{run_id}/events")
     async def stream_events(run_id: str) -> EventSourceResponse:
@@ -159,8 +210,6 @@ def create_app() -> FastAPI:
         )
 
     if UI_DIST.exists():
-        # Mount built SPA at root. The mount has to come last so /api/...
-        # routes register first.
         app.mount("/assets", StaticFiles(directory=str(UI_DIST / "assets")), name="assets")
 
         @app.get("/")
