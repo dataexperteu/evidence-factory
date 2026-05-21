@@ -5,9 +5,13 @@ Merged test suite covering all profiles added by slices 3-7 plus sms.
 
 import pytest
 
-from api.pipeline.persona_registry import PersonaRegistry, RegistryError, SystemActor, default_registry
+from api.pipeline.persona_registry import (
+    PersonaRegistry,
+    RegistryError,
+    SystemActor,
+    default_registry,
+)
 from api.pipeline.types import Device, Persona
-
 
 # ---------------------------------------------------------------------------
 # Default registry structure

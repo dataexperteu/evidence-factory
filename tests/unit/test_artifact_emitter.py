@@ -23,7 +23,6 @@ from api.pipeline.persona_registry import PersonaRegistry, SystemActor
 from api.pipeline.signal_ledger import SignalLedger
 from api.pipeline.types import Device, Event, Persona
 
-
 _TS = datetime(2024, 6, 3, 9, 0, tzinfo=UTC)
 
 

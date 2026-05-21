@@ -60,7 +60,7 @@ def write_sms(brief: SmsBrief, *, disclaimer: str) -> WrittenSms:
     ts_str = brief.sent_at.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
     lines: list[str] = [
-        f"# SMS EXPORT — SYNTHETIC EVIDENCE",
+        "# SMS EXPORT — SYNTHETIC EVIDENCE",
         f"# {disclaimer}",
         f"# Conversation between {brief.sender_name} ({brief.sender_number})"
         f" and {brief.recipient_name} ({brief.recipient_number})",
