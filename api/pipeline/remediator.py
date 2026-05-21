@@ -224,6 +224,10 @@ def remediate(
     *,
     disclaimer: str,
 ) -> list[Artifact]:
+    # dilute() and split() are email-shaped operations; all other profiles
+    # (pdf, xlsx_ledger, jpeg, sms, system_log_csv) pass through unchanged.
+    if artifact.profile != "email":
+        return [artifact]
     if strategy == "split":
         return split(artifact, registry, disclaimer=disclaimer)
     if strategy == "dilute":
