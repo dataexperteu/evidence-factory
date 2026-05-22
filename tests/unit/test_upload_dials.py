@@ -85,6 +85,7 @@ def test_upload_without_dials_uses_medium_defaults(client: TestClient) -> None:
 
     def fake_make_drive(state, source_text, attestation_checked, settings=None):  # type: ignore[override]
         from api.pipeline.orchestrator import RunSettings
+
         captured.append(settings or RunSettings())
 
     with patch("api.main._make_drive", side_effect=fake_make_drive):
@@ -103,6 +104,7 @@ def test_upload_easy_preset_forwarded_to_pipeline(client: TestClient) -> None:
 
     def fake_make_drive(state, source_text, attestation_checked, settings=None):  # type: ignore[override]
         from api.pipeline.orchestrator import RunSettings
+
         captured.append(settings or RunSettings())
 
     params = _make_multipart(difficulty="easy")
@@ -122,6 +124,7 @@ def test_upload_hard_preset_forwarded_to_pipeline(client: TestClient) -> None:
 
     def fake_make_drive(state, source_text, attestation_checked, settings=None):  # type: ignore[override]
         from api.pipeline.orchestrator import RunSettings
+
         captured.append(settings or RunSettings())
 
     params = _make_multipart(difficulty="hard")
@@ -140,6 +143,7 @@ def test_upload_per_dial_overrides_forwarded(client: TestClient) -> None:
 
     def fake_make_drive(state, source_text, attestation_checked, settings=None):  # type: ignore[override]
         from api.pipeline.orchestrator import RunSettings
+
         captured.append(settings or RunSettings())
 
     params = _make_multipart(
@@ -164,10 +168,12 @@ def test_upload_dials_differ_from_defaults_when_preset_changed(client: TestClien
 
     def capture_easy(state, source_text, attestation_checked, settings=None):  # type: ignore[override]
         from api.pipeline.orchestrator import RunSettings
+
         easy_settings.append(settings or RunSettings())
 
     def capture_hard(state, source_text, attestation_checked, settings=None):  # type: ignore[override]
         from api.pipeline.orchestrator import RunSettings
+
         hard_settings.append(settings or RunSettings())
 
     with patch("api.main._make_drive", side_effect=capture_easy):
