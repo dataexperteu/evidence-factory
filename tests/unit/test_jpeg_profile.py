@@ -187,7 +187,7 @@ def test_exif_gps_rational_triples_are_valid():
     # Each coordinate must be a tuple of 3 rational pairs
     assert len(gps_lat) == 3
     assert len(gps_lon) == 3
-    for (num, den) in gps_lat:
+    for num, den in gps_lat:
         assert isinstance(num, int) and isinstance(den, int) and den > 0
-    for (num, den) in gps_lon:
+    for num, den in gps_lon:
         assert isinstance(num, int) and isinstance(den, int) and den > 0

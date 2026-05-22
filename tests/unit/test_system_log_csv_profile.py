@@ -106,9 +106,14 @@ def test_cdr_required_columns() -> None:
     out = write_system_log_csv(_brief(schema="cdr"), disclaimer=DISCLAIMER)
     rows, fieldnames = _parse(out.payload)
     required = {
-        "call_id", "start_time", "end_time",
-        "calling_persona_id", "called_persona_id",
-        "calling_number", "called_number", "direction",
+        "call_id",
+        "start_time",
+        "end_time",
+        "calling_persona_id",
+        "called_persona_id",
+        "calling_number",
+        "called_number",
+        "direction",
     }
     assert required.issubset(set(fieldnames)), f"missing: {required - set(fieldnames)}"
 

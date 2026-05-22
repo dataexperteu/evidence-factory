@@ -113,8 +113,7 @@ def test_keyword_prefilter_95_pct_rejection_rate(guard: LeakContradictGuard) -> 
     flags = guard.keyword_prefilter(synthetic_positives, TRUE_PROPOSITIONS)
     rejection_rate = sum(flags) / len(flags)
     assert rejection_rate >= 0.95, (
-        f"pre-filter rejection rate {rejection_rate:.0%} < 95% "
-        f"(flagged {sum(flags)}/{len(flags)})"
+        f"pre-filter rejection rate {rejection_rate:.0%} < 95% (flagged {sum(flags)}/{len(flags)})"
     )
 
 
