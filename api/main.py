@@ -202,7 +202,12 @@ def create_app() -> FastAPI:
                 if state.completed.is_set():
                     break
                 await asyncio.sleep(0.05)
-            yield {"event": "end", "data": json.dumps({"failed": state.failed})}
+            yield {
+                "event": "end",
+                "data": json.dumps(
+                    {"failed": state.failed, "failure_reason": state.failure_reason}
+                ),
+            }
 
         return EventSourceResponse(gen())
 

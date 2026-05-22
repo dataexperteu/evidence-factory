@@ -231,3 +231,45 @@ details[data-testid="advanced-dials"] summary {
   width: 100%;
   box-sizing: border-box;
 }
+
+/* Inline failure detail shown below a failed stage row */
+.stage-detail {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+  color: #800;
+  margin: 0.1rem 0 0.4rem;
+  padding-left: 0.5rem;
+}
+
+ul.stage-detail {
+  margin: 0.1rem 0 0.4rem;
+  padding-left: 1.5rem;
+}
+
+ul.stage-detail li {
+  margin-bottom: 0.15rem;
+}
+
+/* Recovery section shown below the progress list on failure */
+.failure-recovery {
+  margin-top: 1rem;
+  padding: 0.75rem 1rem;
+  background: #fff8f8;
+  border: 1px solid #e0aaaa;
+  border-radius: 6px;
+}
+
+.failure-hint {
+  margin: 0 0 0.5rem;
+  font-size: 0.88rem;
+  color: #800;
+}
+
+.failure-recovery button {
+  margin-top: 0;
+  background: #a93226;
+}
+
+.failure-recovery button:hover:not(:disabled) {
+  background: #922b21;
+}
