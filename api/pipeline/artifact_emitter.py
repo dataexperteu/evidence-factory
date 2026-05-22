@@ -57,9 +57,7 @@ def _emit_email(
     disclaimer: str,
 ) -> Artifact:
     if not registry.is_permitted(persona.id, device.id, "email"):
-        raise ValueError(
-            f"persona {persona.id} not permitted to emit email on device {device.id}"
-        )
+        raise ValueError(f"persona {persona.id} not permitted to emit email on device {device.id}")
     recipient = _pick_email_recipient(registry, persona.id)
     body = gateway.complete(
         "artifact_content",
@@ -98,9 +96,7 @@ def _emit_pdf(
     disclaimer: str,
 ) -> Artifact:
     if not registry.is_permitted(persona.id, device.id, "pdf"):
-        raise ValueError(
-            f"persona {persona.id} not permitted to emit pdf on device {device.id}"
-        )
+        raise ValueError(f"persona {persona.id} not permitted to emit pdf on device {device.id}")
     body = gateway.complete(
         "artifact_content",
         f"Draft content matching: {event.summary}",
@@ -180,9 +176,7 @@ def _emit_jpeg(
     disclaimer: str,
 ) -> Artifact:
     if not registry.is_permitted(persona.id, device.id, "jpeg"):
-        raise ValueError(
-            f"persona {persona.id} not permitted to emit jpeg on device {device.id}"
-        )
+        raise ValueError(f"persona {persona.id} not permitted to emit jpeg on device {device.id}")
     caption = gateway.complete(
         "artifact_content",
         f"Write a one-sentence photo caption matching: {event.summary}",
@@ -218,9 +212,7 @@ def _emit_sms(
     disclaimer: str,
 ) -> Artifact:
     if not registry.is_permitted(persona.id, device.id, "sms"):
-        raise ValueError(
-            f"persona {persona.id} not permitted to emit sms on device {device.id}"
-        )
+        raise ValueError(f"persona {persona.id} not permitted to emit sms on device {device.id}")
     # Find a recipient persona for the SMS exchange
     recipient_persona = None
     for p in registry.personas():
@@ -329,9 +321,7 @@ def emit_artifacts(
         elif device.profile == "sms":
             artifact = _emit_sms(event, persona, device, registry, gateway, disclaimer)
         else:
-            raise ValueError(
-                f"unsupported profile {device.profile!r} on device {device.id}"
-            )
+            raise ValueError(f"unsupported profile {device.profile!r} on device {device.id}")
 
         ledger.record(artifact)
         artifacts.append(artifact)

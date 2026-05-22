@@ -48,7 +48,7 @@ def _slug(s: str, max_len: int = 40) -> str:
 
 def _safe_sheet_title(s: str, max_len: int = 31) -> str:
     s = _SHEET_INVALID.sub("-", s).strip()
-    return (s[:max_len] or "Ledger")
+    return s[:max_len] or "Ledger"
 
 
 def write_xlsx_ledger(brief: XlsxLedgerBrief, *, disclaimer: str) -> WrittenXlsxLedger:

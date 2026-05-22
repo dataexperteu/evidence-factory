@@ -39,9 +39,7 @@ class PersonaRegistry:
         system_actors: list[SystemActor] | None = None,
     ) -> None:
         self._personas: dict[str, Persona] = {p.id: p for p in personas}
-        self._system_actors: dict[str, SystemActor] = {
-            sa.id: sa for sa in (system_actors or [])
-        }
+        self._system_actors: dict[str, SystemActor] = {sa.id: sa for sa in (system_actors or [])}
         self._devices: dict[str, Device] = {}
         for d in devices:
             if d.owner_id not in self._personas and d.owner_id not in self._system_actors:

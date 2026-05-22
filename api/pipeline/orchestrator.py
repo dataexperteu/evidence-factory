@@ -165,9 +165,7 @@ async def run_pipeline(
 
     yield ProgressEvent("emit", "started"), None
     ledger = SignalLedger()
-    artifacts = emit_artifacts(
-        events, registry, ledger, gateway=gateway, disclaimer=disclaimer
-    )
+    artifacts = emit_artifacts(events, registry, ledger, gateway=gateway, disclaimer=disclaimer)
     yield ProgressEvent("emit", "complete", {"artifacts": len(artifacts)}), None
 
     yield ProgressEvent("critique", "started"), None
