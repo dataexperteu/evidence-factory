@@ -102,6 +102,40 @@ merged with `Closes #N`), restarting `npm run go` skips that slice and lets
 its dependents proceed. A spine-slice failure halts the whole run; an apron
 failure only excludes its own slice.
 
+## Known limitation: intra-run base & shared-file conflicts
+
+ cuts every slice's branch from the on-disk repo HEAD, which
+stays **frozen at the launch commit for the entire run**. The orchestrator's
+ set gates *scheduling* () but never advances the *git
+base* — "merged" there means "the agent committed and the UI-tester passed,"
+not "merged into the base later slices branch from." Two consequences:
+
+1. **Greenfield bootstrap.** If an early slice in the run *creates* the
+   foundation that later slices need (rather than extending an already-merged
+   ), every dependent slice branches off a base that predates that
+   foundation. They diverge — in the worst case on project layout itself —
+   and their PRs conflict at merge time. (Mature repos like agentic-ai don't
+   hit this: the foundation already exists in  before launch.)
+
+   **Operating rule for greenfield runs:** run the foundational/bootstrap
+   spine slice(s) **alone** first; merge to ; refresh the on-disk base
+   (Your branch is up to date with 'origin/main'.
+Already up to date.); *then*
+   launch the dependent slices in a second . The resume gate skips
+   the already-closed bootstrap issue, so the second run only does the rest.
+
+2. **Shared-file hotspots.** Slices that all edit one shared file (a central
+   registry, a dispatch table, a single ) conflict with each
+   other *even off a correct base*. Prefer designs where each unit of work
+   adds a **new file** (one module per profile/plugin, auto-registered) over a
+   single file every slice must touch. Where a hotspot is unavoidable, expect
+   to merge the first PR clean and resolve small conflicts on the rest, or tag
+   those slices to run serially.
+
+The durable architectural fix for hotspot (2) is tracked in
+[issue #25](https://github.com/dataexperteu/evidence-factory/issues/25)
+(refactor the Provenance Catalog to per-profile auto-registered modules).
+
 ## CI gate & auto-merge
 
 Every push to `main` and every PR runs `.github/workflows/ci.yml`:
