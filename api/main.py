@@ -173,6 +173,14 @@ def create_app() -> FastAPI:
         file: UploadFile,
         attestation_checked: bool = Form(...),
         operator_label: str | None = Form(None),
+        difficulty: str | None = Form(None),
+        owners_per_proposition: int | None = Form(None),
+        min_owner_distinct: int | None = Form(None),
+        fragmentation_factor: int | None = Form(None),
+        dominance_margin: float | None = Form(None),
+        target_artifact_count: int | None = Form(None),
+        red_herring_count: int | None = Form(None),
+        noise_count: int | None = Form(None),
     ) -> dict:
         content = await file.read()
         filename = file.filename or "upload.txt"
@@ -183,7 +191,17 @@ def create_app() -> FastAPI:
 
         run_id = _gen_run_id()
         state = await store.create(run_id)
-        _make_drive(state, source.body, attestation_checked)
+        settings = _settings_from_dials(
+            difficulty=difficulty or "medium",  # type: ignore[arg-type]
+            owners_per_proposition=owners_per_proposition,
+            min_owner_distinct=min_owner_distinct,
+            fragmentation_factor=fragmentation_factor,
+            dominance_margin=dominance_margin,
+            target_artifact_count=target_artifact_count,
+            red_herring_count=red_herring_count,
+            noise_count=noise_count,
+        )
+        _make_drive(state, source.body, attestation_checked, settings=settings)
         return {"run_id": run_id}
 
     @app.get("/api/runs/{run_id}/events")
@@ -235,24 +253,47 @@ def create_app() -> FastAPI:
     return app
 
 
-def _settings_from_request(req: StartRunRequest) -> RunSettings:
-    """Build RunSettings from preset + optional per-dial overrides."""
-    s = settings_for_preset(req.difficulty)
-    if req.owners_per_proposition is not None:
-        s.owners_per_proposition = req.owners_per_proposition
-    if req.min_owner_distinct is not None:
-        s.min_owner_distinct = req.min_owner_distinct
-    if req.fragmentation_factor is not None:
-        s.fragmentation_factor = req.fragmentation_factor
-    if req.dominance_margin is not None:
-        s.dominance_margin = req.dominance_margin
-    if req.target_artifact_count is not None:
-        s.target_artifact_count = req.target_artifact_count
-    if req.red_herring_count is not None:
-        s.red_herring_count = req.red_herring_count
-    if req.noise_count is not None:
-        s.noise_count = req.noise_count
+def _settings_from_dials(
+    difficulty: DifficultyPreset = "medium",
+    owners_per_proposition: int | None = None,
+    min_owner_distinct: int | None = None,
+    fragmentation_factor: int | None = None,
+    dominance_margin: float | None = None,
+    target_artifact_count: int | None = None,
+    red_herring_count: int | None = None,
+    noise_count: int | None = None,
+) -> RunSettings:
+    """Build RunSettings from a preset name and optional per-dial overrides."""
+    s = settings_for_preset(difficulty)
+    if owners_per_proposition is not None:
+        s.owners_per_proposition = owners_per_proposition
+    if min_owner_distinct is not None:
+        s.min_owner_distinct = min_owner_distinct
+    if fragmentation_factor is not None:
+        s.fragmentation_factor = fragmentation_factor
+    if dominance_margin is not None:
+        s.dominance_margin = dominance_margin
+    if target_artifact_count is not None:
+        s.target_artifact_count = target_artifact_count
+    if red_herring_count is not None:
+        s.red_herring_count = red_herring_count
+    if noise_count is not None:
+        s.noise_count = noise_count
     return s
+
+
+def _settings_from_request(req: StartRunRequest) -> RunSettings:
+    """Build RunSettings from a StartRunRequest (preset + optional per-dial overrides)."""
+    return _settings_from_dials(
+        difficulty=req.difficulty,
+        owners_per_proposition=req.owners_per_proposition,
+        min_owner_distinct=req.min_owner_distinct,
+        fragmentation_factor=req.fragmentation_factor,
+        dominance_margin=req.dominance_margin,
+        target_artifact_count=req.target_artifact_count,
+        red_herring_count=req.red_herring_count,
+        noise_count=req.noise_count,
+    )
 
 
 def _gen_run_id() -> str:
