@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ActivityLog, LogEntry } from "./ActivityLog";
 
 type IntakeMode = "paste" | "url" | "upload";
 type DifficultyPreset = "easy" | "medium" | "hard";
@@ -163,6 +164,9 @@ export function App() {
   const sourceRef = useRef<EventSource | null>(null);
   const failedStageRef = useRef<boolean>(false);
 
+  // Activity log — persists across run resets
+  const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
+
   const submitting = runId !== null && !streamDone;
   const succeeded =
     streamDone && events.some((e) => e.stage === "done" && e.status === "complete");
@@ -176,6 +180,14 @@ export function App() {
     (mode === "upload" && uploadFile !== null);
 
   const canSubmit = modeReady && attested && !submitting;
+
+  function addLogEntry(icon: LogEntry["icon"], message: string) {
+    const now = new Date();
+    const timestamp = [now.getHours(), now.getMinutes(), now.getSeconds()]
+      .map((n) => String(n).padStart(2, "0"))
+      .join(":");
+    setLogEntries((prev) => [{ id: Date.now(), timestamp, icon, message }, ...prev]);
+  }
 
   function resetRun() {
     setRunId(null);
@@ -220,19 +232,37 @@ export function App() {
   function startSse(id: string) {
     const es = new EventSource(`/api/runs/${id}/events`);
     sourceRef.current = es;
+    let runSucceeded = false;
+    let lastFailedStage: string | null = null;
+    let streamEndHandled = false;
+
     const handleStage = (ev: MessageEvent) => {
       try {
         const parsed = JSON.parse(ev.data) as StageEvent;
         setEvents((prev) => [...prev, parsed]);
-        if (parsed.status === "failed") {
+
+        if (parsed.stage === "done" && parsed.status === "complete") {
+          runSucceeded = true;
+          const count = parsed.detail?.artifact_count as number | undefined;
+          addLogEntry("✓", `Corpus ready${count !== undefined ? `, ${count} artifacts` : ""}`);
+        } else if (parsed.status === "complete") {
+          addLogEntry("✓", `Stage: ${parsed.stage} ✓`);
+        } else if (parsed.status === "failed") {
+          lastFailedStage = parsed.stage;
           failedStageRef.current = true;
+          const reason = parsed.detail?.failure_reason as string | undefined;
+          addLogEntry("✗", `Stage: ${parsed.stage} ✗${reason ? ` — ${reason}` : ""}`);
         }
       } catch {
         /* ignore malformed frames */
       }
     };
+
     STAGES.forEach((stage) => es.addEventListener(stage, handleStage));
+
     es.addEventListener("end", (ev: MessageEvent) => {
+      if (streamEndHandled) return;
+      streamEndHandled = true;
       try {
         const data = JSON.parse(ev.data) as { failed?: boolean; failure_reason?: string };
         if (data.failed && data.failure_reason && !failedStageRef.current) {
@@ -241,10 +271,22 @@ export function App() {
       } catch {
         /* ignore */
       }
+      if (!runSucceeded) {
+        addLogEntry(
+          "✗",
+          `Run failed${lastFailedStage ? ` at ${lastFailedStage}` : ""}`,
+        );
+      }
       setStreamDone(true);
       es.close();
     });
+
     es.onerror = () => {
+      if (streamEndHandled) return;
+      streamEndHandled = true;
+      if (!runSucceeded) {
+        addLogEntry("✗", `Run failed${lastFailedStage ? ` at ${lastFailedStage}` : ""}`);
+      }
       setStreamDone(true);
       es.close();
     };
@@ -307,6 +349,11 @@ export function App() {
 
     const { run_id } = (await resp.json()) as { run_id: string };
     setRunId(run_id);
+
+    const presetLabel = activePreset ?? "custom";
+    const redLabel = `${dials.red_herring_count} red herring${dials.red_herring_count !== 1 ? "s" : ""}`;
+    addLogEntry("ℹ", `Run started (${presetLabel} preset, ${mode}, ${redLabel})`);
+
     startSse(run_id);
   }
 
@@ -608,10 +655,13 @@ export function App() {
           data-testid="download"
           href={`/api/runs/${runId}/zip`}
           download={`evidence-factory-${runId}.zip`}
+          onClick={() => addLogEntry("ℹ", "corpus.zip downloaded")}
         >
           Download corpus zip
         </a>
       )}
+
+      <ActivityLog entries={logEntries} onClear={() => setLogEntries([])} />
     </div>
   );
 }
