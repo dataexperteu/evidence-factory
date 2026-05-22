@@ -12,7 +12,6 @@ from __future__ import annotations
 import asyncio
 import json
 from collections.abc import AsyncIterator
-from dataclasses import dataclass, field
 from typing import Any
 from unittest.mock import patch
 
@@ -21,7 +20,6 @@ import pytest
 from api.main import _RunState, create_app
 from api.pipeline.attestation import AttestationRequired
 from api.pipeline.orchestrator import ProgressEvent, RunResult
-
 
 # ---------------------------------------------------------------------------
 # _RunState defaults
@@ -106,7 +104,7 @@ async def test_failure_reason_set_on_attestation_error() -> None:
 @pytest.mark.asyncio
 async def test_sse_end_event_includes_failure_reason() -> None:
     """The end event data must contain failure_reason when a stage fails."""
-    from httpx import AsyncClient, ASGITransport
+    from httpx import ASGITransport, AsyncClient
 
     app = create_app()
 
@@ -125,7 +123,6 @@ async def test_sse_end_event_includes_failure_reason() -> None:
             run_id = run_data["run_id"]
 
             # Wait for the background drive task to finish.
-            app_store = app.state  # not directly accessible; use a small poll
             await asyncio.sleep(0.2)
 
             end_payload: dict | None = None
