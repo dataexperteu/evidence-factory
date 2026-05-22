@@ -178,6 +178,9 @@ const SLICES: Slice[] = [
   // every profile, so it cannot run until they exist. Spine: carries the
   // ≥95% leak-guard characterization test and a tree-wide deletion.
   { issue: 33, key: "slice-13-consolidate-noise",   dependsOn: [5, 6, 7, 8, 9], lane: "spine" },
+  // Gap fixes filed 2026-05-22: upload dials bug (#43), closure failure UX (#46).
+  { issue: 43, key: "slice-14-upload-dials-fix",    dependsOn: [14, 4],          lane: "apron" },
+  { issue: 46, key: "slice-15-closure-failure-ux",  dependsOn: [3],              lane: "apron" },
 ];
 
 const ready = (s: Slice, merged: Set<number>) =>
