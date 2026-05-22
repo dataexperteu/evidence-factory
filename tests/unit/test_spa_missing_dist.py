@@ -13,9 +13,7 @@ import api.main as api_main
 from api.main import create_app
 
 
-def test_missing_dist_logs_warning(
-    caplog: pytest.LogCaptureFixture, tmp_path: Path
-) -> None:
+def test_missing_dist_logs_warning(caplog: pytest.LogCaptureFixture, tmp_path: Path) -> None:
     """When ui-app/dist/ is absent, startup logs an actionable build instruction."""
     absent = tmp_path / "nonexistent"
     with patch.object(api_main, "UI_DIST", absent):
@@ -26,9 +24,7 @@ def test_missing_dist_logs_warning(
     assert "npm run build" in caplog.text
 
 
-def test_present_dist_no_missing_warning(
-    caplog: pytest.LogCaptureFixture, tmp_path: Path
-) -> None:
+def test_present_dist_no_missing_warning(caplog: pytest.LogCaptureFixture, tmp_path: Path) -> None:
     """When ui-app/dist/ exists with index.html, no missing-dist warning is emitted."""
     dist = tmp_path / "dist"
     assets = dist / "assets"
