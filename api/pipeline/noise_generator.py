@@ -162,9 +162,7 @@ class NoiseGenerator:
             triples.append((device.owner_id, device))
         return triples
 
-    def _timestamp(
-        self, item: dict[str, object], start: datetime, end: datetime
-    ) -> datetime:
+    def _timestamp(self, item: dict[str, object], start: datetime, end: datetime) -> datetime:
         try:
             frac = float(item.get("timestamp_offset_hours", 0.0))  # type: ignore[arg-type]
         except (TypeError, ValueError):
