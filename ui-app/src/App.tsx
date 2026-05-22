@@ -200,6 +200,14 @@ export function App() {
         const fd = new FormData();
         fd.append("file", uploadFile!);
         fd.append("attestation_checked", String(attested));
+        fd.append("difficulty", activePreset ?? "medium");
+        fd.append("owners_per_proposition", String(dials.owners_per_proposition));
+        fd.append("min_owner_distinct", String(dials.min_owner_distinct));
+        fd.append("fragmentation_factor", String(dials.fragmentation_factor));
+        fd.append("dominance_margin", String(dials.dominance_margin));
+        fd.append("target_artifact_count", String(dials.target_artifact_count));
+        fd.append("red_herring_count", String(dials.red_herring_count));
+        fd.append("noise_count", String(dials.noise_count));
         resp = await fetch("/api/runs/upload", { method: "POST", body: fd });
       }
     } catch (e) {
