@@ -71,7 +71,9 @@ def test_only_permitted_triples() -> None:
 def test_timestamps_within_timeline() -> None:
     artifacts, _ = _generate(_generator(), target_count=40)
     for art in artifacts:
-        assert START <= art.acquisition_time <= END, f"timestamp {art.acquisition_time} out of range"
+        assert START <= art.acquisition_time <= END, (
+            f"timestamp {art.acquisition_time} out of range"
+        )
 
 
 def test_noise_carries_no_bound_propositions() -> None:

@@ -62,7 +62,9 @@ def _two_persona_email_registry() -> PersonaRegistry:
 def test_emitter_routes_email_event():
     reg = _two_persona_email_registry()
     events = [_event("d_test_mail")]
-    artifacts = emit_artifacts(events, reg, SignalLedger(), gateway=_StubGateway(), disclaimer="SYN")
+    artifacts = emit_artifacts(
+        events, reg, SignalLedger(), gateway=_StubGateway(), disclaimer="SYN"
+    )
     assert len(artifacts) == 1
     assert artifacts[0].profile == "email"
     assert artifacts[0].filename.endswith(".eml")
@@ -156,7 +158,9 @@ def test_emitter_routes_sms_event():
 def test_emitter_routes_system_log_event():
     p = Persona(id="p_test", display_name="Test User", email_address="test@example.test")
     sa = SystemActor(id="sys_test", label="test-controller", log_schema="access_log")
-    d_sys = Device(id="d_sys_ctrl", owner_id="sys_test", label="controller", profile="system_log_csv")
+    d_sys = Device(
+        id="d_sys_ctrl", owner_id="sys_test", label="controller", profile="system_log_csv"
+    )
     d_mail = Device(id="d_test_mail", owner_id="p_test", label="test-laptop", profile="email")
     reg = PersonaRegistry([p], [d_sys, d_mail], system_actors=[sa])
     sys_event = Event(

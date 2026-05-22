@@ -94,13 +94,16 @@ def test_single_sheet_with_header_and_data_rows():
 
 def test_numeric_and_date_cell_types_preserved():
     from datetime import date
+
     out = write_xlsx_ledger(_brief(), disclaimer="d")
     wb = openpyxl.load_workbook(io.BytesIO(out.payload))
     ws = wb.active
     assert ws is not None
     rows = list(ws.iter_rows(values_only=True))
     # row[1] = first data row
-    assert isinstance(rows[1][0], (datetime, date)), f"expected date/datetime, got {type(rows[1][0])}"
+    assert isinstance(rows[1][0], (datetime, date)), (
+        f"expected date/datetime, got {type(rows[1][0])}"
+    )
     assert isinstance(rows[1][2], (int, float)), f"expected numeric, got {type(rows[1][2])}"
     assert isinstance(rows[1][1], str)
 

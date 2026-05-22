@@ -46,10 +46,7 @@ def test_default_registry_jpeg_devices_present():
     """Slice 6: at least one jpeg-capable device owner in the registry."""
     reg = default_registry()
     jpeg_owners = {
-        d.owner_id
-        for p in reg.personas()
-        for d in reg.devices_for(p.id)
-        if d.profile == "jpeg"
+        d.owner_id for p in reg.personas() for d in reg.devices_for(p.id) if d.profile == "jpeg"
     }
     assert len(jpeg_owners) >= 1
 
@@ -57,12 +54,7 @@ def test_default_registry_jpeg_devices_present():
 def test_default_registry_jpeg_devices_carry_make_model():
     """Slice 6: JPEG devices must have non-empty make and model strings."""
     reg = default_registry()
-    jpeg_devices = [
-        d
-        for p in reg.personas()
-        for d in reg.devices_for(p.id)
-        if d.profile == "jpeg"
-    ]
+    jpeg_devices = [d for p in reg.personas() for d in reg.devices_for(p.id) if d.profile == "jpeg"]
     for dev in jpeg_devices:
         assert dev.make, f"device {dev.id} missing make"
         assert dev.model, f"device {dev.id} missing model"
@@ -72,10 +64,7 @@ def test_default_registry_sms_devices_present():
     """SMS devices must be present for at least two personas."""
     reg = default_registry()
     sms_owners = {
-        d.owner_id
-        for p in reg.personas()
-        for d in reg.devices_for(p.id)
-        if d.profile == "sms"
+        d.owner_id for p in reg.personas() for d in reg.devices_for(p.id) if d.profile == "sms"
     }
     assert len(sms_owners) >= 2, f"expected ≥2 SMS device owners, got: {sms_owners}"
 

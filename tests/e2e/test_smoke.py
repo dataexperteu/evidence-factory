@@ -153,9 +153,7 @@ def test_smoke_xlsx_artifacts_present_and_parseable():
 
     zip_bytes = _run()
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
-        xlsx_paths = [
-            n for n in zf.namelist() if n.startswith("corpus/") and n.endswith(".xlsx")
-        ]
+        xlsx_paths = [n for n in zf.namelist() if n.startswith("corpus/") and n.endswith(".xlsx")]
         assert xlsx_paths, "expected at least one .xlsx artifact in corpus"
         for path in xlsx_paths:
             payload = zf.read(path)
@@ -195,7 +193,8 @@ def test_smoke_corpus_contains_system_log_csv_artifacts():
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
         names = zf.namelist()
     csv_paths = [
-        n for n in names
+        n
+        for n in names
         if n.startswith("corpus/") and n.endswith(".csv") and n != "corpus/manifest.csv"
     ]
     assert csv_paths, "corpus must contain at least one system_log_csv artifact (.csv)"
@@ -313,7 +312,8 @@ def _disclaimer_present(path: str, payload: bytes, disclaimer: str) -> bool:
         import pypdf
 
         reader = pypdf.PdfReader(io.BytesIO(payload))
-        return disclaimer in (reader.metadata.get("/Keywords", "") or "")
+        meta = reader.metadata
+        return disclaimer in ((meta.get("/Keywords", "") if meta is not None else "") or "")
     if path.endswith(".jpg"):
         import piexif
         import piexif.helper
