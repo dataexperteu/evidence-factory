@@ -273,3 +273,255 @@ ul.stage-detail li {
 .failure-recovery button:hover:not(:disabled) {
   background: #922b21;
 }
+
+/* Help banner */
+.help-banner {
+  position: relative;
+  margin-bottom: 1.5rem;
+  background: #e8f0fe;
+  border: 1px solid #b3cdf7;
+  border-radius: 8px;
+  padding: 0.75rem 2.5rem 0.75rem 1rem;
+}
+
+.help-dismiss-btn {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.75rem;
+  margin-top: 0;
+  padding: 0.1rem 0.45rem;
+  background: transparent;
+  color: #1a3c6b;
+  border: none;
+  border-radius: 4px;
+  font-size: 1.1rem;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.6;
+}
+
+.help-dismiss-btn:hover {
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.06);
+}
+
+.help-banner .help-content {
+  color: #1a3c6b;
+}
+
+.help-banner .help-content p {
+  margin: 0 0 0.6rem;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.help-banner .help-content ul {
+  margin: 0.25rem 0 0;
+  padding-left: 1.4rem;
+}
+
+.help-banner .help-content li {
+  font-size: 0.92rem;
+  line-height: 1.5;
+  margin-bottom: 0.2rem;
+}
+
+/* Activity log — Variant B: fixed pill + bottom-sheet drawer */
+.activity-log {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  z-index: 1000;
+}
+
+/* Pill toggle button */
+.activity-log-toggle {
+  margin-top: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #222;
+  color: #fff;
+  border: none;
+  border-radius: 999px;
+  padding: 0.45rem 1rem;
+  font-size: 0.88rem;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+}
+
+.activity-log-toggle:hover {
+  background: #333;
+}
+
+.activity-log-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #2d6cdf;
+  color: white;
+  border-radius: 999px;
+  padding: 0 0.45rem;
+  font-size: 0.72rem;
+  min-width: 1.3rem;
+  height: 1.3rem;
+  line-height: 1;
+}
+
+.activity-log-toggle.has-error .activity-log-badge {
+  background: #b00;
+}
+
+/* Bottom-sheet drawer — slides up from the pill, ~360px wide, up to 50vh tall */
+.activity-log-panel {
+  position: absolute;
+  bottom: calc(100% + 0.6rem);
+  right: 0;
+  width: 360px;
+  max-height: 50vh;
+  display: flex;
+  flex-direction: column;
+  background: #fff;
+  border: 1px solid #ccc;
+  border-radius: 10px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+
+.activity-log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid #e8e8e8;
+  background: #f8f8f8;
+}
+
+.activity-log-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.activity-log-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.activity-log-clear {
+  margin-top: 0;
+  background: transparent;
+  color: #555;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+  padding: 0.15rem 0.5rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.activity-log-clear:hover {
+  background: #eee;
+  color: #222;
+}
+
+.activity-log-close {
+  margin-top: 0;
+  background: transparent;
+  color: #555;
+  border: none;
+  border-radius: 4px;
+  padding: 0.15rem 0.4rem;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.activity-log-close:hover {
+  background: #eee;
+  color: #222;
+}
+
+.activity-log-body {
+  overflow-y: auto;
+  flex: 1;
+  padding: 0.4rem 0.75rem;
+}
+
+.activity-log-empty {
+  margin: 0.5rem 0;
+  color: #999;
+  font-size: 0.85rem;
+  text-align: center;
+  padding: 0.4rem 0;
+}
+
+.activity-log-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.log-entry {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.18rem 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.82rem;
+}
+
+.log-timestamp {
+  color: #888;
+  flex-shrink: 0;
+}
+
+.log-icon {
+  flex-shrink: 0;
+}
+
+.log-entry-success .log-icon {
+  color: #0a6e2e;
+}
+
+.log-entry-error .log-icon {
+  color: #b00;
+}
+
+.log-entry-info .log-icon {
+  color: #2d6cdf;
+}
+
+.log-message {
+  word-break: break-word;
+}
+  background: #922b21;
+}
+
+/* Resume banner — shown when a completed previous run is found in localStorage */
+.resume-banner {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+  padding: 0.75rem 1rem;
+  background: #e8f4fd;
+  border: 1px solid #b3d7f0;
+  border-radius: 6px;
+}
+
+.resume-banner .download {
+  margin-top: 0;
+}
+
+.resume-dismiss {
+  margin-top: 0;
+  background: transparent;
+  border: 1px solid #999;
+  color: #555;
+  padding: 0.3rem 0.75rem;
+}
+
+.resume-dismiss:hover:not(:disabled) {
+  background: #f0f0f0;
+}

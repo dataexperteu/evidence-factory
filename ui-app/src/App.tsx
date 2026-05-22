@@ -1,4 +1,42 @@
 import { useEffect, useRef, useState } from "react";
+import { ActivityLog, LogEntry } from "./ActivityLog";
+import { Help } from "./Help";
+
+// ---------------------------------------------------------------------------
+// localStorage persistence
+// ---------------------------------------------------------------------------
+
+const STORAGE_KEY = "ef_run";
+
+type StoredRun = {
+  run_id: string;
+  succeeded: boolean;
+  failed: boolean;
+};
+
+function saveRun(run: StoredRun): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(run));
+  } catch {
+    /* ignore QuotaExceeded etc */
+  }
+}
+
+function clearRun(): void {
+  localStorage.removeItem(STORAGE_KEY);
+}
+
+function loadRun(): StoredRun | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (typeof parsed?.run_id === "string") return parsed as StoredRun;
+    return null;
+  } catch {
+    return null;
+  }
+}
 
 type IntakeMode = "paste" | "url" | "upload";
 type DifficultyPreset = "easy" | "medium" | "hard";
@@ -162,6 +200,13 @@ export function App() {
   const [streamDone, setStreamDone] = useState(false);
   const sourceRef = useRef<EventSource | null>(null);
   const failedStageRef = useRef<boolean>(false);
+  const doneRef = useRef<boolean>(false);
+
+  // Activity log — persists across run resets
+  const [logEntries, setLogEntries] = useState<LogEntry[]>([]);
+
+  // Previous run restored from localStorage (succeeded runs only — show download banner)
+  const [prevRun, setPrevRun] = useState<StoredRun | null>(null);
 
   const submitting = runId !== null && !streamDone;
   const succeeded =
@@ -177,12 +222,22 @@ export function App() {
 
   const canSubmit = modeReady && attested && !submitting;
 
+  function addLogEntry(icon: LogEntry["icon"], message: string) {
+    const now = new Date();
+    const timestamp = [now.getHours(), now.getMinutes(), now.getSeconds()]
+      .map((n) => String(n).padStart(2, "0"))
+      .join(":");
+    setLogEntries((prev) => [{ id: Date.now(), timestamp, icon, message }, ...prev]);
+  }
+
   function resetRun() {
+    setPrevRun(null);
     setRunId(null);
     setEvents([]);
     setError(null);
     setStreamDone(false);
     failedStageRef.current = false;
+    doneRef.current = false;
     sourceRef.current?.close();
     sourceRef.current = null;
   }
@@ -220,31 +275,64 @@ export function App() {
   function startSse(id: string) {
     const es = new EventSource(`/api/runs/${id}/events`);
     sourceRef.current = es;
+    let runSucceeded = false;
+    let lastFailedStage: string | null = null;
+    let streamEndHandled = false;
+
     const handleStage = (ev: MessageEvent) => {
       try {
         const parsed = JSON.parse(ev.data) as StageEvent;
         setEvents((prev) => [...prev, parsed]);
-        if (parsed.status === "failed") {
+
+        if (parsed.stage === "done" && parsed.status === "complete") {
+          runSucceeded = true;
+          doneRef.current = true;
+          const count = parsed.detail?.artifact_count as number | undefined;
+          addLogEntry("✓", `Corpus ready${count !== undefined ? `, ${count} artifacts` : ""}`);
+        } else if (parsed.status === "complete") {
+          addLogEntry("✓", `Stage: ${parsed.stage} ✓`);
+        } else if (parsed.status === "failed") {
+          lastFailedStage = parsed.stage;
           failedStageRef.current = true;
+          const reason = parsed.detail?.failure_reason as string | undefined;
+          addLogEntry("✗", `Stage: ${parsed.stage} ✗${reason ? ` — ${reason}` : ""}`);
         }
       } catch {
         /* ignore malformed frames */
       }
     };
+
     STAGES.forEach((stage) => es.addEventListener(stage, handleStage));
+
     es.addEventListener("end", (ev: MessageEvent) => {
+      if (streamEndHandled) return;
+      streamEndHandled = true;
       try {
         const data = JSON.parse(ev.data) as { failed?: boolean; failure_reason?: string };
         if (data.failed && data.failure_reason && !failedStageRef.current) {
           setError(data.failure_reason);
         }
+        const finalSucceeded = doneRef.current && !data.failed;
+        saveRun({ run_id: id, succeeded: finalSucceeded, failed: !finalSucceeded });
       } catch {
         /* ignore */
+      }
+      if (!runSucceeded) {
+        addLogEntry(
+          "✗",
+          `Run failed${lastFailedStage ? ` at ${lastFailedStage}` : ""}`,
+        );
       }
       setStreamDone(true);
       es.close();
     });
+
     es.onerror = () => {
+      if (streamEndHandled) return;
+      streamEndHandled = true;
+      if (!runSucceeded) {
+        addLogEntry("✗", `Run failed${lastFailedStage ? ` at ${lastFailedStage}` : ""}`);
+      }
       setStreamDone(true);
       es.close();
     };
@@ -306,7 +394,13 @@ export function App() {
     }
 
     const { run_id } = (await resp.json()) as { run_id: string };
+    saveRun({ run_id, succeeded: false, failed: false });
     setRunId(run_id);
+
+    const presetLabel = activePreset ?? "custom";
+    const redLabel = `${dials.red_herring_count} red herring${dials.red_herring_count !== 1 ? "s" : ""}`;
+    addLogEntry("ℹ", `Run started (${presetLabel} preset, ${mode}, ${redLabel})`);
+
     startSse(run_id);
   }
 
@@ -316,6 +410,23 @@ export function App() {
     };
   }, []);
 
+  // Restore previous run from localStorage on mount
+  useEffect(() => {
+    const stored = loadRun();
+    if (!stored) return;
+    if (stored.succeeded) {
+      setPrevRun(stored);
+    } else if (!stored.failed) {
+      // In-progress run: reconnect to SSE
+      setRunId(stored.run_id);
+      startSse(stored.run_id);
+    } else {
+      // Failed run: clear so next mount starts clean
+      clearRun();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   return (
     <div className="app">
       <h1>Evidence Factory</h1>
@@ -323,6 +434,33 @@ export function App() {
         Provide a source story, attest authorised use, and generate a synthetic
         forensic-style corpus zip.
       </p>
+
+      <Help />
+
+      {/* Previous run resume banner */}
+      {prevRun && (
+        <div className="resume-banner" data-testid="resume-banner">
+          <span>Previous run found.</span>
+          <a
+            className="download resume-download"
+            data-testid="resume-download"
+            href={`/api/runs/${prevRun.run_id}/zip`}
+            download={`evidence-factory-${prevRun.run_id}.zip`}
+          >
+            Download corpus zip
+          </a>
+          <button
+            className="resume-dismiss"
+            data-testid="resume-dismiss"
+            onClick={() => {
+              clearRun();
+              setPrevRun(null);
+            }}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Mode selector */}
       <div className="mode-tabs" role="tablist" aria-label="Intake mode">
@@ -608,10 +746,13 @@ export function App() {
           data-testid="download"
           href={`/api/runs/${runId}/zip`}
           download={`evidence-factory-${runId}.zip`}
+          onClick={() => addLogEntry("ℹ", "corpus.zip downloaded")}
         >
           Download corpus zip
         </a>
       )}
+
+      <ActivityLog entries={logEntries} onClear={() => setLogEntries([])} />
     </div>
   );
 }
