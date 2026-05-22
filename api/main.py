@@ -17,7 +17,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -126,7 +128,13 @@ def _make_drive(
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="Evidence Factory")
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        port = os.environ.get("PORT", "8080")
+        LOG.info("Evidence Factory listening on http://0.0.0.0:%s", port)
+        yield
+
+    app = FastAPI(title="Evidence Factory", lifespan=lifespan)
     store = _JobStore()
 
     @app.get("/healthz")
