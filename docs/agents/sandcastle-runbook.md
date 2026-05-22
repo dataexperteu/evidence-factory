@@ -102,6 +102,27 @@ merged with `Closes #N`), restarting `npm run go` skips that slice and lets
 its dependents proceed. A spine-slice failure halts the whole run; an apron
 failure only excludes its own slice.
 
+The harness owns PR creation. Slice implementer agents commit on
+`slice/<key>` and report readiness; they must not run `gh pr create`. Before
+launching a sandbox, the host checks GitHub for the linked issue and existing
+PRs for the slice branch. Closed issues, closed/merged linked PRs, and existing
+open PRs are treated as already handled so restarts do not reopen stable
+branches or create duplicate PRs.
+
+## Duplicate PR recovery
+
+If duplicate PRs appear, **stop the VM orchestrator before closing duplicate
+PRs**. Otherwise the live process can observe the now-available stable branch
+and create or reopen another PR while you are cleaning up.
+
+Recovery order:
+
+1. Stop the tmux run with the canonical "Stop a run" command.
+2. Keep exactly one intended PR for the slice branch/issue.
+3. Close the duplicate PRs.
+4. Restart the harness only after GitHub shows the intended open PR, merged PR,
+   or closed linked issue.
+
 ## Known limitation: intra-run base & shared-file conflicts
 
  cuts every slice's branch from the on-disk repo HEAD, which
@@ -143,9 +164,12 @@ a **python** job (`ruff check`, `mypy api`, `pytest`) and a **frontend** job
 (`npm run typecheck`, `npm run build` in `ui-app/`). Playwright e2e is *not* in
 CI — it needs live servers and is covered by the harness's Phase-2 UI-tester.
 
-The harness now **auto-merges**. When a slice lands and its UI-tester gate
-passes, `orchestrate.ts` calls `gh pr merge <branch> --auto --squash`; the PR
-then squash-merges **itself the moment CI goes green** — no human merge step.
+The harness now **auto-merges**. When a slice implementer commits, the host
+creates or reuses exactly one PR for that slice branch. The PR body created by
+the host includes `Closes #N`. When the UI-tester gate passes, `orchestrate.ts`
+calls `gh pr merge <pr-number> --auto --squash` where it has a resolved PR
+number. The PR then squash-merges **itself the moment CI goes green** — no
+human merge step.
 Issue-closing is automatic via the `Closes #N` line in the PR body.
 
 This needs two one-time repo settings (idempotent; run from the laptop with

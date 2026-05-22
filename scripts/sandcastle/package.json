@@ -4,10 +4,13 @@
   "type": "module",
   "description": "AFK orchestration harness for Evidence Factory (PRD #1). AUTHORED — run only after the operator checklist in docs/agents/sandcastle-runbook.md is complete. Uses the OFFICIAL @ai-hero/sandcastle (mattpocock/sandcastle); the bare npm `sandcastle` package is unrelated/abandoned and pulls a critical lodash@2 advisory — do not use it.",
   "scripts": {
-    "go": "tsx orchestrate.ts --go"
+    "go": "tsx orchestrate.ts --go",
+    "test": "tsx --test orchestrate.test.ts",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@ai-hero/sandcastle": "^0.5.10",
+    "@types/node": "^25.9.1",
     "tsx": "^4.19.2",
     "typescript": "^5.9.3"
   }

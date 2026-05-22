@@ -119,8 +119,17 @@ function preflightAgentEnv(root: string): void {
   }
 }
 
-const REPO_ROOT = resolveRepoRoot();
-preflightAgentEnv(REPO_ROOT);
+let repoRoot: string | undefined;
+let agentEnvChecked = false;
+
+function getRepoRoot(): string {
+  if (!repoRoot) repoRoot = resolveRepoRoot();
+  if (!agentEnvChecked) {
+    preflightAgentEnv(repoRoot);
+    agentEnvChecked = true;
+  }
+  return repoRoot;
+}
 
 const REPO = "dataexperteu/evidence-factory";
 const SPINE_MODEL = "claude-opus-4-7";
@@ -249,10 +258,12 @@ function prompt(s: Slice) {
     `     (Python: ruff/mypy if configured; TypeScript: \`cd ui-app && npx tsc -b --noEmit\`).`,
     `  2. \`cd ui-app && npx vite build\` exits 0 (if ui-app/ exists).`,
     `  3. The slice's own new/changed unit + golden/characterization tests pass.`,
-    `Once those hold: commit on \`slice/${s.key}\`, open a PR linked to`,
-    `#${s.issue} (body must contain \`Closes #${s.issue}\`), and STOP immediately`,
-    `— do not re-verify, do not poll CI, do not merge. A separate UI-tester agent`,
-    `then validates this slice's UI; if it passes, the harness enables GitHub`,
+    `Once those hold: commit on \`slice/${s.key}\` and STOP immediately.`,
+    `Do NOT run \`gh pr create\`, do NOT open a PR, do NOT poll CI, and do NOT merge.`,
+    `Report readiness in your final message only. The host harness creates or`,
+    `reuses the PR linked to #${s.issue} with \`Closes #${s.issue}\`.`,
+    `A separate UI-tester agent then validates this slice's UI; if it passes,`,
+    `the harness enables GitHub`,
     `auto-merge (squash) and the PR merges itself once CI goes green.`,
   ].join("\n");
 }
@@ -286,28 +297,166 @@ function uiTestPrompt(s: Slice) {
   ].join("\n");
 }
 
+type GhIssue = {
+  state: "OPEN" | "CLOSED";
+};
+
+export type PullRequestSummary = {
+  number: number;
+  state: "OPEN" | "CLOSED" | "MERGED";
+  headRefName: string;
+  body?: string | null;
+  url?: string;
+  closingIssuesReferences?: { number: number }[] | null;
+};
+
+export type SliceGithubState = {
+  issueState: GhIssue["state"];
+  prs: PullRequestSummary[];
+};
+
+export type SliceHostDecision =
+  | { action: "run-implementer" }
+  | { action: "skip"; reason: "issue-closed" | "handled-pr"; pr?: PullRequestSummary }
+  | { action: "reuse-open-pr"; pr: PullRequestSummary };
+
+function ghJson<T>(args: string[]): T {
+  const out = execFileSync("gh", args, {
+    cwd: getRepoRoot(),
+    encoding: "utf8",
+  });
+  return JSON.parse(out) as T;
+}
+
+function gh(args: string[]) {
+  return execFileSync("gh", args, {
+    cwd: getRepoRoot(),
+    stdio: "pipe",
+    encoding: "utf8",
+  });
+}
+
+function git(args: string[]) {
+  return execFileSync("git", args, {
+    cwd: getRepoRoot(),
+    stdio: "pipe",
+    encoding: "utf8",
+  });
+}
+
+export function prReferencesIssue(pr: PullRequestSummary, issue: number): boolean {
+  if (pr.closingIssuesReferences?.some((i) => i.number === issue)) return true;
+  const body = pr.body ?? "";
+  return new RegExp(`\\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\\s+#${issue}\\b`, "i")
+    .test(body);
+}
+
+function newestPr(prs: PullRequestSummary[]): PullRequestSummary | undefined {
+  return [...prs].sort((a, b) => b.number - a.number)[0];
+}
+
+export function decideSliceHostAction(
+  state: SliceGithubState,
+  issue: number,
+  branch: string,
+): SliceHostDecision {
+  if (state.issueState === "CLOSED") {
+    return { action: "skip", reason: "issue-closed" };
+  }
+
+  const branchPrs = state.prs.filter((p) => p.headRefName === branch);
+  const open = newestPr(branchPrs.filter((p) => p.state === "OPEN"));
+  if (open) return { action: "reuse-open-pr", pr: open };
+
+  const handled = newestPr(
+    branchPrs.filter((p) => p.state !== "OPEN" && prReferencesIssue(p, issue)),
+  );
+  if (handled) {
+    return { action: "skip", reason: "handled-pr", pr: handled };
+  }
+
+  return { action: "run-implementer" };
+}
+
+function getSliceGithubState(s: Slice, branch: string): SliceGithubState {
+  const issue = ghJson<GhIssue>([
+    "issue", "view", String(s.issue), "--repo", REPO, "--json", "state",
+  ]);
+  const prs = ghJson<PullRequestSummary[]>([
+    "pr", "list", "--repo", REPO, "--head", branch, "--state", "all", "--limit", "50",
+    "--json", "number,state,headRefName,body,url,closingIssuesReferences",
+  ]);
+  return { issueState: issue.state, prs };
+}
+
+function logHostDecision(s: Slice, branch: string, decision: SliceHostDecision) {
+  if (decision.action === "skip" && decision.reason === "issue-closed") {
+    console.log(`  -> #${s.issue} skipped: linked issue is already closed.`);
+  } else if (decision.action === "skip") {
+    console.log(
+      `  -> #${s.issue} skipped: ${branch} already has ${decision.pr?.state.toLowerCase()} ` +
+        `PR #${decision.pr?.number} linked to the issue.`,
+    );
+  } else if (decision.action === "reuse-open-pr") {
+    console.log(`  -> #${s.issue} reusing open PR #${decision.pr.number} for ${branch}.`);
+  }
+}
+
+function pushBranch(branch: string) {
+  git(["push", "-u", "origin", branch]);
+}
+
+function createPullRequest(s: Slice, branch: string): PullRequestSummary {
+  try {
+    gh([
+      "pr", "create", "--repo", REPO, "--base", "main", "--head", branch,
+      "--title", `Slice ${s.issue}: ${s.key}`,
+      "--body", `Closes #${s.issue}`,
+    ]);
+  } catch (e) {
+    const state = getSliceGithubState(s, branch);
+    const decision = decideSliceHostAction(state, s.issue, branch);
+    if (decision.action === "reuse-open-pr") return decision.pr;
+    throw e;
+  }
+  const state = getSliceGithubState(s, branch);
+  const decision = decideSliceHostAction(state, s.issue, branch);
+  if (decision.action !== "reuse-open-pr") {
+    throw new Error(`created PR for ${branch}, but could not resolve the open PR number`);
+  }
+  return decision.pr;
+}
+
+function resolveOrCreatePullRequest(s: Slice, branch: string) {
+  const decision = decideSliceHostAction(getSliceGithubState(s, branch), s.issue, branch);
+  if (decision.action === "skip") return decision;
+  pushBranch(branch);
+  if (decision.action === "reuse-open-pr") return decision;
+  return { action: "reuse-open-pr" as const, pr: createPullRequest(s, branch) };
+}
+
 /**
  * Enable GitHub auto-merge (squash) on the slice's PR once it has landed and
- * the UI-tester gate passed. The agent already opened the PR (with `Closes #N`),
- * so `gh` resolves it from the branch. `--auto` queues the squash-merge to fire
+ * the UI-tester gate passed. Prefer a resolved PR number; branch lookup is only
+ * a fallback. `--auto` queues the squash-merge to fire
  * only when branch protection's required checks (CI) go green — never merging
  * red code. Defensive: a failure here (e.g. auto-merge not enabled on the repo
  * yet, or no branch protection) is logged, not fatal — the PR simply waits for a
  * human, exactly as before. Requires the repo setting "Allow auto-merge" ON and
  * branch protection with a required status check; see the runbook.
  */
-function enableAutoMerge(branch: string) {
+function enableAutoMerge(prOrBranch: number | string) {
   try {
     execFileSync(
       "gh",
-      ["pr", "merge", branch, "--repo", REPO, "--auto", "--squash"],
-      { cwd: REPO_ROOT, stdio: "pipe", encoding: "utf8" },
+      ["pr", "merge", String(prOrBranch), "--repo", REPO, "--auto", "--squash"],
+      { cwd: getRepoRoot(), stdio: "pipe", encoding: "utf8" },
     );
-    console.log(`  ⏳ auto-merge (squash) enabled for ${branch} — fires when CI is green.`);
+    console.log(`  ⏳ auto-merge (squash) enabled for ${prOrBranch} — fires when CI is green.`);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.error(
-      `  ! auto-merge not enabled for ${branch} (${msg.split("\n")[0]}). ` +
+      `  ! auto-merge not enabled for ${prOrBranch} (${msg.split("\n")[0]}). ` +
         `PR left for manual merge — check repo "Allow auto-merge" + branch protection.`,
     );
   }
@@ -317,7 +466,7 @@ function enableAutoMerge(branch: string) {
 function reclaimWorktree(branch: string) {
   try {
     const list = execFileSync("git", ["worktree", "list", "--porcelain"], {
-      cwd: REPO_ROOT,
+      cwd: getRepoRoot(),
       encoding: "utf8",
     });
     let cur: string | undefined;
@@ -325,12 +474,12 @@ function reclaimWorktree(branch: string) {
       if (line.startsWith("worktree ")) cur = line.slice(9);
       else if (line === `branch refs/heads/${branch}` && cur) {
         execFileSync("git", ["worktree", "remove", "--force", cur], {
-          cwd: REPO_ROOT,
+          cwd: getRepoRoot(),
           stdio: "inherit",
         });
       }
     }
-    execFileSync("git", ["worktree", "prune"], { cwd: REPO_ROOT });
+    execFileSync("git", ["worktree", "prune"], { cwd: getRepoRoot() });
   } catch (e) {
     console.error(`  ! worktree reclaim failed for ${branch}: ${e}`);
   }
@@ -338,23 +487,44 @@ function reclaimWorktree(branch: string) {
 
 async function runSlice(s: Slice) {
   const branch = `slice/${s.key}`;
+  const before = decideSliceHostAction(getSliceGithubState(s, branch), s.issue, branch);
+  let pr: PullRequestSummary | undefined;
+  if (before.action === "skip") {
+    logHostDecision(s, branch, before);
+    return { issue: s.issue, key: s.key, committed: true };
+  }
+  if (before.action === "reuse-open-pr") {
+    logHostDecision(s, branch, before);
+    pr = before.pr;
+  }
+
   const sandbox = await sandcastle.createSandbox({
     branch,
-    cwd: REPO_ROOT, // MUST be the git root — see resolveRepoRoot() above.
+    cwd: getRepoRoot(), // MUST be the git root — see resolveRepoRoot() above.
     sandbox: sandboxProvider(),
     hooks,
   });
   try {
-    // Phase 1 — implementer.
-    const impl = await sandbox.run({
-      name: `slice-${s.issue}-impl`,
-      agent: sandcastle.claudeCode(s.lane === "spine" ? SPINE_MODEL : APRON_MODEL),
-      // Spine gets more iterations for the characterization-test DoD.
-      maxIterations: s.lane === "spine" ? 120 : 80,
-      prompt: prompt(s),
-    });
-    if ((impl.commits?.length ?? 0) === 0) {
-      return { issue: s.issue, key: s.key, committed: false };
+    if (!pr) {
+      // Phase 1 — implementer.
+      const impl = await sandbox.run({
+        name: `slice-${s.issue}-impl`,
+        agent: sandcastle.claudeCode(s.lane === "spine" ? SPINE_MODEL : APRON_MODEL),
+        // Spine gets more iterations for the characterization-test DoD.
+        maxIterations: s.lane === "spine" ? 120 : 80,
+        prompt: prompt(s),
+      });
+      if ((impl.commits?.length ?? 0) === 0) {
+        return { issue: s.issue, key: s.key, committed: false };
+      }
+
+      // Host PR resolution. Re-check GitHub immediately before any PR creation.
+      const prDecision = resolveOrCreatePullRequest(s, branch);
+      if (prDecision.action === "skip") {
+        logHostDecision(s, branch, prDecision);
+        return { issue: s.issue, key: s.key, committed: true };
+      }
+      pr = prDecision.pr;
     }
 
     // Phase 2 — UI-tester gate (same branch). FAIL excludes the slice so its
@@ -373,7 +543,8 @@ async function runSlice(s: Slice) {
       return { issue: s.issue, key: s.key, committed: false };
     }
     // PASS or SKIPPED-NOT-UI → slice landed. Queue the squash-merge; CI gates it.
-    enableAutoMerge(branch);
+    pushBranch(branch);
+    enableAutoMerge(pr.number);
     return { issue: s.issue, key: s.key, committed: true };
   } finally {
     await sandbox.close();
@@ -395,7 +566,7 @@ function alreadyLandedIssues(): Set<number> {
       "gh",
       ["issue", "list", "--repo", REPO, "--state", "closed",
        "--limit", "300", "--json", "number"],
-      { cwd: REPO_ROOT, encoding: "utf8" },
+      { cwd: getRepoRoot(), encoding: "utf8" },
     );
     const closed = new Set<number>(
       (JSON.parse(out) as { number: number }[]).map((i) => i.number),
@@ -449,8 +620,11 @@ export async function orchestrate() {
 
 // Intentionally NOT auto-invoked. Run only after the operator runbook checklist:
 // `npm run go`.
-if (process.argv.includes("--go")) {
-  orchestrate()
-    .then((r) => console.log("done", r))
-    .catch((e) => { console.error(e); process.exit(1); });
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  getRepoRoot();
+  if (process.argv.includes("--go")) {
+    orchestrate()
+      .then((r) => console.log("done", r))
+      .catch((e) => { console.error(e); process.exit(1); });
+  }
 }
