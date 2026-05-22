@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { ActivityLog, LogEntry } from "./ActivityLog";
+import { Help } from "./Help";
 
 // ---------------------------------------------------------------------------
 // localStorage persistence
@@ -433,6 +434,8 @@ export function App() {
         Provide a source story, attest authorised use, and generate a synthetic
         forensic-style corpus zip.
       </p>
+
+      <Help />
 
       {/* Previous run resume banner */}
       {prevRun && (
