@@ -132,6 +132,8 @@ def create_app() -> FastAPI:
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         port = os.environ.get("PORT", "8080")
         LOG.info("Evidence Factory listening on http://0.0.0.0:%s", port)
+        if not UI_DIST.exists():
+            LOG.warning("ui-app/dist/ not found — run 'npm run build' first")
         yield
 
     app = FastAPI(title="Evidence Factory", lifespan=lifespan)
