@@ -66,7 +66,75 @@ type StageEvent = {
   detail: Record<string, unknown>;
 };
 
+type ClosureGap = {
+  proposition_id: string;
+  required: number;
+  observed: number;
+  distinct_owners: string[];
+};
+
+type RedHerringGap = {
+  proposition_id: string;
+  support_signal: number;
+  breaker_signal: number;
+  required_breaker_signal: number;
+  reason: string;
+};
+
+type DominanceGap = {
+  alternative_id: string;
+  truth_support: number;
+  alternative_support: number;
+  required_max_support: number;
+  margin_shortfall: number;
+  reason: string;
+};
+
+type CloseDetail = {
+  gaps?: ClosureGap[];
+  red_herring_gaps?: RedHerringGap[];
+  dominance_gaps?: DominanceGap[];
+};
+
 const STAGES = ["intake", "extract", "events", "emit", "critique", "close", "package", "done"] as const;
+
+function FailureDetail({ ev }: { ev: StageEvent }) {
+  if (ev.stage === "close") {
+    const d = ev.detail as CloseDetail;
+    const items: string[] = [];
+    for (const g of d.gaps ?? []) {
+      items.push(
+        `Proposition ${g.proposition_id}: needs ${g.required} corroborating owner(s), found ${g.observed}`,
+      );
+    }
+    for (const g of d.red_herring_gaps ?? []) {
+      items.push(`Red-herring ${g.proposition_id}: ${g.reason}`);
+    }
+    for (const g of d.dominance_gaps ?? []) {
+      items.push(`Dominance gap for ${g.alternative_id}: ${g.reason}`);
+    }
+    if (items.length === 0) {
+      return (
+        <div className="stage-detail" data-testid="failure-detail">
+          Closure verification failed.
+        </div>
+      );
+    }
+    return (
+      <ul className="stage-detail" data-testid="failure-detail">
+        {items.map((item, i) => (
+          <li key={i}>{item}</li>
+        ))}
+      </ul>
+    );
+  }
+  const msg = (ev.detail as { error?: string }).error ?? "Stage failed.";
+  return (
+    <div className="stage-detail" data-testid="failure-detail">
+      {msg}
+    </div>
+  );
+}
 
 export function App() {
   const [mode, setMode] = useState<IntakeMode>("paste");
@@ -93,10 +161,14 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [streamDone, setStreamDone] = useState(false);
   const sourceRef = useRef<EventSource | null>(null);
+  const failedStageRef = useRef<boolean>(false);
 
   const submitting = runId !== null && !streamDone;
   const succeeded =
     streamDone && events.some((e) => e.stage === "done" && e.status === "complete");
+
+  const failedEvent = events.find((e) => e.status === "failed") ?? null;
+  const hasFailed = streamDone && failedEvent !== null;
 
   const modeReady =
     (mode === "paste" && paste.trim().length > 0) ||
@@ -110,6 +182,7 @@ export function App() {
     setEvents([]);
     setError(null);
     setStreamDone(false);
+    failedStageRef.current = false;
     sourceRef.current?.close();
     sourceRef.current = null;
   }
@@ -151,12 +224,23 @@ export function App() {
       try {
         const parsed = JSON.parse(ev.data) as StageEvent;
         setEvents((prev) => [...prev, parsed]);
+        if (parsed.status === "failed") {
+          failedStageRef.current = true;
+        }
       } catch {
         /* ignore malformed frames */
       }
     };
     STAGES.forEach((stage) => es.addEventListener(stage, handleStage));
-    es.addEventListener("end", () => {
+    es.addEventListener("end", (ev: MessageEvent) => {
+      try {
+        const data = JSON.parse(ev.data) as { failed?: boolean; failure_reason?: string };
+        if (data.failed && data.failure_reason && !failedStageRef.current) {
+          setError(data.failure_reason);
+        }
+      } catch {
+        /* ignore */
+      }
       setStreamDone(true);
       es.close();
     });
@@ -493,15 +577,28 @@ export function App() {
       {events.length > 0 && (
         <div className="progress" data-testid="progress">
           {events.map((ev, i) => (
-            <div
-              className={`stage ${ev.status}`}
-              key={i}
-              data-testid={`stage-${ev.stage}-${ev.status}`}
-            >
-              <span>{ev.stage}</span>
-              <span>{ev.status}</span>
+            <div key={i}>
+              <div
+                className={`stage ${ev.status}`}
+                data-testid={`stage-${ev.stage}-${ev.status}`}
+              >
+                <span>{ev.stage}</span>
+                <span>{ev.status}</span>
+              </div>
+              {ev.status === "failed" && <FailureDetail ev={ev} />}
             </div>
           ))}
+        </div>
+      )}
+
+      {hasFailed && (
+        <div className="failure-recovery" data-testid="failure-recovery">
+          <p className="failure-hint">
+            Tip: reduce difficulty or try again — transient errors sometimes resolve on retry.
+          </p>
+          <button data-testid="retry" onClick={onGenerate} disabled={submitting}>
+            Retry
+          </button>
         </div>
       )}
 
