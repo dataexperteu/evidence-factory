@@ -185,6 +185,9 @@ const SLICES: Slice[] = [
   { issue: 48, key: "slice-16-help-panel",           dependsOn: [3],              lane: "apron" },
   { issue: 50, key: "slice-17-docker-deploy",        dependsOn: [3],              lane: "apron" },
   { issue: 51, key: "slice-18-activity-log",         dependsOn: [3],              lane: "apron" },
+  // Operator-experience fixes filed 2026-05-22.
+  { issue: 44, key: "slice-19-spa-missing-dist",     dependsOn: [3],              lane: "apron" },
+  { issue: 45, key: "slice-20-run-state-persistence", dependsOn: [3],             lane: "apron" },
 ];
 
 const ready = (s: Slice, merged: Set<number>) =>
