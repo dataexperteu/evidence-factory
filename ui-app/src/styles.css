@@ -441,3 +441,34 @@ ul.stage-detail li {
 .log-message {
   word-break: break-word;
 }
+  background: #922b21;
+}
+
+/* Resume banner — shown when a completed previous run is found in localStorage */
+.resume-banner {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+  padding: 0.75rem 1rem;
+  background: #e8f4fd;
+  border: 1px solid #b3d7f0;
+  border-radius: 6px;
+}
+
+.resume-banner .download {
+  margin-top: 0;
+}
+
+.resume-dismiss {
+  margin-top: 0;
+  background: transparent;
+  border: 1px solid #999;
+  color: #555;
+  padding: 0.3rem 0.75rem;
+}
+
+.resume-dismiss:hover:not(:disabled) {
+  background: #f0f0f0;
+}
