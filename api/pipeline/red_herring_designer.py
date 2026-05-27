@@ -85,14 +85,14 @@ def _write_email_artifact(
 def _email_personas(registry: PersonaRegistry) -> list[Persona]:
     out: list[Persona] = []
     for persona in registry.personas():
-        if any(d.profile == "email" for d in registry.devices_for(persona.id)):
+        if any("email" in d.profiles for d in registry.devices_for(persona.id)):
             out.append(persona)
     return out
 
 
 def _first_email_device(registry: PersonaRegistry, persona: Persona) -> str:
     for device in registry.devices_for(persona.id):
-        if device.profile == "email":
+        if "email" in device.profiles:
             return device.id
     raise ValueError(f"persona {persona.id} owns no email device")
 

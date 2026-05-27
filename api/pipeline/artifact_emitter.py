@@ -1,7 +1,7 @@
 """Artifact Emitter — turns Events into written artifacts.
 
 Dispatch is device-profile-driven.  System-actor events are detected first
-(registry.is_system_actor), then persona events are dispatched on device.profile.
+(registry.is_system_actor), then persona events are dispatched on device.profiles[0].
 
 Profile → writer mapping:
   email          → api/provenance/email_profile.py
@@ -310,18 +310,21 @@ def emit_artifacts(
         persona = registry.get_persona(event.actor_id)
         device = registry.get_device(event.device_id)
 
-        if device.profile == "email":
+        dispatch_profile = device.profiles[0]
+        if dispatch_profile == "email":
             artifact = _emit_email(event, persona, device, registry, gateway, disclaimer)
-        elif device.profile == "pdf":
+        elif dispatch_profile == "pdf":
             artifact = _emit_pdf(event, persona, device, registry, gateway, disclaimer)
-        elif device.profile == "xlsx_ledger":
+        elif dispatch_profile == "xlsx_ledger":
             artifact = _emit_xlsx_ledger(event, persona, device, registry, gateway, disclaimer)
-        elif device.profile == "jpeg":
+        elif dispatch_profile == "jpeg":
             artifact = _emit_jpeg(event, persona, device, registry, gateway, disclaimer)
-        elif device.profile == "sms":
+        elif dispatch_profile == "sms":
             artifact = _emit_sms(event, persona, device, registry, gateway, disclaimer)
         else:
-            raise ValueError(f"unsupported profile {device.profile!r} on device {device.id}")
+            raise ValueError(
+                f"unsupported primary profile {dispatch_profile!r} on device {device.id}"
+            )
 
         ledger.record(artifact)
         artifacts.append(artifact)

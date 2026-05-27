@@ -50,7 +50,7 @@ def _two_persona_email_registry() -> PersonaRegistry:
     """Two personas, first owns an email device (needed for recipient lookup)."""
     p1 = Persona(id="p_test", display_name="Test User", email_address="test@example.test")
     p2 = Persona(id="p_other", display_name="Other Person", email_address="other@example.test")
-    d = Device(id="d_test_mail", owner_id="p_test", label="test-laptop", profile="email")
+    d = Device(id="d_test_mail", owner_id="p_test", label="test-laptop", profiles=("email",))
     return PersonaRegistry([p1, p2], [d])
 
 
@@ -77,7 +77,7 @@ def test_emitter_routes_email_event():
 
 def test_emitter_routes_pdf_event():
     p = Persona(id="p_test", display_name="Test User", email_address="test@example.test")
-    d = Device(id="d_test_ws", owner_id="p_test", label="test-workstation", profile="pdf")
+    d = Device(id="d_test_ws", owner_id="p_test", label="test-workstation", profiles=("pdf",))
     reg = PersonaRegistry([p], [d])
     artifacts = emit_artifacts(
         [_event("d_test_ws")], reg, SignalLedger(), gateway=_StubGateway(), disclaimer="SYN"
@@ -94,7 +94,9 @@ def test_emitter_routes_pdf_event():
 
 def test_emitter_routes_xlsx_ledger_event():
     p = Persona(id="p_test", display_name="Test User", email_address="test@example.test")
-    d = Device(id="d_test_xl", owner_id="p_test", label="test-workstation", profile="xlsx_ledger")
+    d = Device(
+        id="d_test_xl", owner_id="p_test", label="test-workstation", profiles=("xlsx_ledger",)
+    )
     reg = PersonaRegistry([p], [d])
     artifacts = emit_artifacts(
         [_event("d_test_xl")], reg, SignalLedger(), gateway=_StubGateway(), disclaimer="SYN"
@@ -118,7 +120,7 @@ def test_emitter_routes_jpeg_event():
         id="d_test_cam",
         owner_id="p_test",
         label="test-camera",
-        profile="jpeg",
+        profiles=("jpeg",),
         make="Canon",
         model="EOS R5",
     )
@@ -140,7 +142,7 @@ def test_emitter_routes_jpeg_event():
 def test_emitter_routes_sms_event():
     p1 = Persona(id="p_test", display_name="Test User", email_address="test@example.test")
     p2 = Persona(id="p_other", display_name="Other Person", email_address="other@example.test")
-    d = Device(id="d_test_phone", owner_id="p_test", label="test-phone", profile="sms")
+    d = Device(id="d_test_phone", owner_id="p_test", label="test-phone", profiles=("sms",))
     reg = PersonaRegistry([p1, p2], [d])
     artifacts = emit_artifacts(
         [_event("d_test_phone")], reg, SignalLedger(), gateway=_StubGateway(), disclaimer="SYN"
@@ -159,9 +161,9 @@ def test_emitter_routes_system_log_event():
     p = Persona(id="p_test", display_name="Test User", email_address="test@example.test")
     sa = SystemActor(id="sys_test", label="test-controller", log_schema="access_log")
     d_sys = Device(
-        id="d_sys_ctrl", owner_id="sys_test", label="controller", profile="system_log_csv"
+        id="d_sys_ctrl", owner_id="sys_test", label="controller", profiles=("system_log_csv",)
     )
-    d_mail = Device(id="d_test_mail", owner_id="p_test", label="test-laptop", profile="email")
+    d_mail = Device(id="d_test_mail", owner_id="p_test", label="test-laptop", profiles=("email",))
     reg = PersonaRegistry([p], [d_sys, d_mail], system_actors=[sa])
     sys_event = Event(
         id="ev_sys_1",
@@ -189,7 +191,7 @@ def test_emitter_rejects_unknown_device():
     from api.pipeline.persona_registry import RegistryError
 
     p = Persona(id="p_test", display_name="Test User", email_address="test@example.test")
-    d = Device(id="d_test_mail", owner_id="p_test", label="test-laptop", profile="email")
+    d = Device(id="d_test_mail", owner_id="p_test", label="test-laptop", profiles=("email",))
     reg = PersonaRegistry([p], [d])
     bad_event = Event(
         id="ev_bad",
@@ -207,8 +209,10 @@ def test_emitter_rejects_cross_actor_device_use():
     """Persona cannot emit via a device owned by a different persona."""
     p1 = Persona(id="p_test", display_name="Test User", email_address="test@example.test")
     p2 = Persona(id="p_other", display_name="Other Person", email_address="other@example.test")
-    d_other = Device(id="d_other_mail", owner_id="p_other", label="other-laptop", profile="email")
-    d_self = Device(id="d_test_mail", owner_id="p_test", label="test-laptop", profile="email")
+    d_other = Device(
+        id="d_other_mail", owner_id="p_other", label="other-laptop", profiles=("email",)
+    )
+    d_self = Device(id="d_test_mail", owner_id="p_test", label="test-laptop", profiles=("email",))
     reg = PersonaRegistry([p1, p2], [d_self, d_other])
     cross_event = Event(
         id="ev_cross",

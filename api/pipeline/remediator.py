@@ -149,7 +149,7 @@ def _email_persona_and_device(registry: PersonaRegistry, *, exclude_id: str) -> 
         if persona.id == exclude_id:
             continue
         for device in registry.devices_for(persona.id):
-            if device.profile == "email":
+            if "email" in device.profiles:
                 return persona, device.id
     raise ValueError("registry must have a second email-capable persona to relocate to")
 

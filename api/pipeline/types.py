@@ -39,12 +39,12 @@ class Persona:
 
 @dataclass(frozen=True)
 class Device:
-    """A device or account owned by a Persona or system actor, capable of emitting one profile."""
+    """A device or account owned by a Persona or system actor, capable of emitting multiple profiles."""
 
     id: str
     owner_id: str
     label: str
-    profile: Literal["email", "pdf", "xlsx_ledger", "jpeg", "system_log_csv", "sms"]
+    profiles: tuple[str, ...]
     make: str = ""
     model: str = ""
     gps_capable: bool = False
