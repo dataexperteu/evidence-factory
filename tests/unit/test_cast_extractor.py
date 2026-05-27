@@ -54,10 +54,7 @@ def test_fixture_mode_email_persona_guarantee():
     gw = LLMGateway(mode="fixture")
     reg = extract_cast(_source(), gateway=gw)
     email_owners = {
-        d.owner_id
-        for p in reg.personas()
-        for d in reg.devices_for(p.id)
-        if d.profile == "email"
+        d.owner_id for p in reg.personas() for d in reg.devices_for(p.id) if d.profile == "email"
     }
     assert len(email_owners) >= 2, f"expected ≥2 email-device owners, got {email_owners}"
 
@@ -84,10 +81,7 @@ def test_fallback_registry_satisfies_email_guarantee():
     gw = _gateway_returning("NOT JSON")
     reg = extract_cast(_source(), gateway=gw)
     email_owners = {
-        d.owner_id
-        for p in reg.personas()
-        for d in reg.devices_for(p.id)
-        if d.profile == "email"
+        d.owner_id for p in reg.personas() for d in reg.devices_for(p.id) if d.profile == "email"
     }
     assert len(email_owners) >= 2
 
@@ -117,30 +111,26 @@ def test_email_guarantee_with_one_llm_persona():
     gw = _gateway_returning(payload)
     reg = extract_cast(_source(), gateway=gw)
     email_owners = {
-        d.owner_id
-        for p in reg.personas()
-        for d in reg.devices_for(p.id)
-        if d.profile == "email"
+        d.owner_id for p in reg.personas() for d in reg.devices_for(p.id) if d.profile == "email"
     }
     assert len(email_owners) >= 2
 
 
 def test_email_guarantee_with_multiple_llm_personas():
     """When LLM returns multiple personas the email minimum is still met."""
-    payload = json.dumps({
-        "personas": [
-            {"display_name": "Alice", "role": "protagonist"},
-            {"display_name": "Bob", "role": "antagonist"},
-            {"display_name": "Carol", "role": "witness"},
-        ]
-    })
+    payload = json.dumps(
+        {
+            "personas": [
+                {"display_name": "Alice", "role": "protagonist"},
+                {"display_name": "Bob", "role": "antagonist"},
+                {"display_name": "Carol", "role": "witness"},
+            ]
+        }
+    )
     gw = _gateway_returning(payload)
     reg = extract_cast(_source(), gateway=gw)
     email_owners = {
-        d.owner_id
-        for p in reg.personas()
-        for d in reg.devices_for(p.id)
-        if d.profile == "email"
+        d.owner_id for p in reg.personas() for d in reg.devices_for(p.id) if d.profile == "email"
     }
     assert len(email_owners) >= 2
 
@@ -159,7 +149,9 @@ def test_system_actors_are_always_appended():
     ]:
         gw = _gateway_returning(payload)
         reg = extract_cast(_source(), gateway=gw)
-        assert reg.is_system_actor("sys_bldg_access"), f"missing sys_bldg_access for payload={payload!r}"
+        assert reg.is_system_actor("sys_bldg_access"), (
+            f"missing sys_bldg_access for payload={payload!r}"
+        )
         assert reg.is_system_actor("sys_pbx"), f"missing sys_pbx for payload={payload!r}"
 
 
@@ -179,12 +171,14 @@ def test_system_devices_owned_by_system_actors():
 
 
 def test_persona_ids_are_slugified():
-    payload = json.dumps({
-        "personas": [
-            {"display_name": "Jane Doe", "role": "protagonist"},
-            {"display_name": "John Smith", "role": "antagonist"},
-        ]
-    })
+    payload = json.dumps(
+        {
+            "personas": [
+                {"display_name": "Jane Doe", "role": "protagonist"},
+                {"display_name": "John Smith", "role": "antagonist"},
+            ]
+        }
+    )
     gw = _gateway_returning(payload)
     reg = extract_cast(_source(), gateway=gw)
     ids = reg.persona_ids()
