@@ -94,7 +94,9 @@ def test_emitter_routes_pdf_event():
 
 def test_emitter_routes_xlsx_ledger_event():
     p = Persona(id="p_test", display_name="Test User", email_address="test@example.test")
-    d = Device(id="d_test_xl", owner_id="p_test", label="test-workstation", profiles=("xlsx_ledger",))
+    d = Device(
+        id="d_test_xl", owner_id="p_test", label="test-workstation", profiles=("xlsx_ledger",)
+    )
     reg = PersonaRegistry([p], [d])
     artifacts = emit_artifacts(
         [_event("d_test_xl")], reg, SignalLedger(), gateway=_StubGateway(), disclaimer="SYN"
@@ -207,7 +209,9 @@ def test_emitter_rejects_cross_actor_device_use():
     """Persona cannot emit via a device owned by a different persona."""
     p1 = Persona(id="p_test", display_name="Test User", email_address="test@example.test")
     p2 = Persona(id="p_other", display_name="Other Person", email_address="other@example.test")
-    d_other = Device(id="d_other_mail", owner_id="p_other", label="other-laptop", profiles=("email",))
+    d_other = Device(
+        id="d_other_mail", owner_id="p_other", label="other-laptop", profiles=("email",)
+    )
     d_self = Device(id="d_test_mail", owner_id="p_test", label="test-laptop", profiles=("email",))
     reg = PersonaRegistry([p1, p2], [d_self, d_other])
     cross_event = Event(

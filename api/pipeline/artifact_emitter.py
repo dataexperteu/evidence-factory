@@ -322,7 +322,9 @@ def emit_artifacts(
         elif dispatch_profile == "sms":
             artifact = _emit_sms(event, persona, device, registry, gateway, disclaimer)
         else:
-            raise ValueError(f"unsupported primary profile {dispatch_profile!r} on device {device.id}")
+            raise ValueError(
+                f"unsupported primary profile {dispatch_profile!r} on device {device.id}"
+            )
 
         ledger.record(artifact)
         artifacts.append(artifact)

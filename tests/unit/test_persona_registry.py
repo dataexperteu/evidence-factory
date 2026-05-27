@@ -46,10 +46,7 @@ def test_default_registry_jpeg_devices_present():
     """Slice 6: at least one jpeg-capable device owner in the registry."""
     reg = default_registry()
     jpeg_owners = {
-        d.owner_id
-        for p in reg.personas()
-        for d in reg.devices_for(p.id)
-        if "jpeg" in d.profiles
+        d.owner_id for p in reg.personas() for d in reg.devices_for(p.id) if "jpeg" in d.profiles
     }
     assert len(jpeg_owners) >= 1
 
@@ -69,10 +66,7 @@ def test_default_registry_sms_devices_present():
     """SMS devices must be present for at least two personas."""
     reg = default_registry()
     sms_owners = {
-        d.owner_id
-        for p in reg.personas()
-        for d in reg.devices_for(p.id)
-        if "sms" in d.profiles
+        d.owner_id for p in reg.personas() for d in reg.devices_for(p.id) if "sms" in d.profiles
     }
     assert len(sms_owners) >= 2, f"expected ≥2 SMS device owners, got: {sms_owners}"
 
