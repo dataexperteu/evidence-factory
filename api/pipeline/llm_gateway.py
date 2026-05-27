@@ -30,7 +30,7 @@ from typing import Any, Literal
 
 LOG = logging.getLogger("evidence_factory.llm")
 
-Role = Literal["truth_extractor", "event_graph", "artifact_content", "critic", "closure", "noise"]
+Role = Literal["truth_extractor", "event_graph", "artifact_content", "critic", "closure", "noise", "cast"]
 
 # The smoking-gun bar: a single load-bearing artifact carrying this much (or
 # more) signal weight is judged strong enough to prove its bound proposition on
@@ -48,6 +48,7 @@ _REASONING_ROLES: set[Role] = {
     "artifact_content",
     "critic",
     "closure",
+    "cast",
 }
 
 # Mundane, case-agnostic noise sentences used in fixture mode. They share no
@@ -149,12 +150,23 @@ class LLMGateway:
         enough structure to let the orchestrator wire-up be tested."""
         if role == "critic":
             return self._fixture_critic_verdict(prompt)
+        if role == "cast":
+            return self._fixture_cast_response()
         salt = self._rng.randint(1_000, 9_999)
         digest = hashlib.sha256(prompt.encode("utf-8")).hexdigest()[:8]
         return (
             f"[{role}::{digest}::{salt}] synthetic fixture response — "
             f"this run is non-deterministic by design."
         )
+
+    def _fixture_cast_response(self) -> str:
+        return json.dumps({
+            "personas": [
+                {"display_name": "Alice Fixture", "role": "protagonist"},
+                {"display_name": "Bob Fixture", "role": "antagonist"},
+                {"display_name": "Carol Fixture", "role": "witness"},
+            ]
+        })
 
     def _fixture_critic_verdict(self, prompt: str) -> str:
         """Stand in for the Smoking-Gun Critic LLM with a structured verdict.
