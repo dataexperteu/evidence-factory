@@ -1,7 +1,10 @@
 """Artifact Emitter — turns Events into written artifacts.
 
 Dispatch is device-profile-driven.  System-actor events are detected first
-(registry.is_system_actor), then persona events are dispatched on device.profiles[0].
+(registry.is_system_actor), then persona events are dispatched using a
+per-device cycling counter over device.profiles — each successive event on
+the same device gets the next profile in the tuple, producing balanced
+deterministic distribution across profiles.
 
 Profile → writer mapping:
   email          → api/provenance/email_profile.py
@@ -300,6 +303,7 @@ def emit_artifacts(
     disclaimer: str,
 ) -> list[Artifact]:
     artifacts: list[Artifact] = []
+    device_counters: dict[str, int] = {}
     for event in events:
         # System-actor events are handled first (log branch design)
         if registry.is_system_actor(event.actor_id):
@@ -310,7 +314,10 @@ def emit_artifacts(
         persona = registry.get_persona(event.actor_id)
         device = registry.get_device(event.device_id)
 
-        dispatch_profile = device.profiles[0]
+        counter = device_counters.get(device.id, 0)
+        dispatch_profile = device.profiles[counter % len(device.profiles)]
+        device_counters[device.id] = counter + 1
+
         if dispatch_profile == "email":
             artifact = _emit_email(event, persona, device, registry, gateway, disclaimer)
         elif dispatch_profile == "pdf":
@@ -322,9 +329,7 @@ def emit_artifacts(
         elif dispatch_profile == "sms":
             artifact = _emit_sms(event, persona, device, registry, gateway, disclaimer)
         else:
-            raise ValueError(
-                f"unsupported primary profile {dispatch_profile!r} on device {device.id}"
-            )
+            raise ValueError(f"unsupported profile {dispatch_profile!r} on device {device.id}")
 
         ledger.record(artifact)
         artifacts.append(artifact)

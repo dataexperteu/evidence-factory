@@ -85,10 +85,8 @@ def test_noise_carries_no_bound_propositions() -> None:
 
 
 def test_all_profiles_represented() -> None:
-    # Multi-profile devices expand the triple list to 33 entries (31 persona
-    # device-profile combos + 2 system devices). With BATCH_SIZE=10 each
-    # iteration, we need >33 iterations = >330 artifacts to cycle through all
-    # triples including the two system_log_csv devices at the end of the list.
+    # 15 devices in the default registry (one entry per device, profile chosen
+    # randomly per batch). With 400 artifacts all profiles appear with certainty.
     artifacts, summary = _generate(_generator(), target_count=400)
     used = {a.profile for a in artifacts}
     expected = {"email", "pdf", "sms", "jpeg", "xlsx_ledger", "system_log_csv"}
