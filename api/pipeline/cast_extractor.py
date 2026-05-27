@@ -54,18 +54,16 @@ _FALLBACK_PERSONAS: list[dict[str, str]] = [
 
 def _slugify(name: str, max_len: int = 30) -> str:
     s = _SLUG_RE.sub("_", name.lower()).strip("_")
-    return (s[:max_len] or "person")
+    return s[:max_len] or "person"
 
 
 def _story_slug(source: SourceText) -> str:
     words = source.body.split()[:4]
     s = _SLUG_RE.sub("_", " ".join(words).lower()).strip("_")
-    return (s[:30] or "story")
+    return s[:30] or "story"
 
 
-def _build_personas(
-    raw_list: list[dict[str, Any]], story_slug: str
-) -> list[Persona]:
+def _build_personas(raw_list: list[dict[str, Any]], story_slug: str) -> list[Persona]:
     """Synthesise Persona objects from LLM-returned dicts, deduplicating slugs."""
     slug_counts: dict[str, int] = {}
     personas: list[Persona] = []

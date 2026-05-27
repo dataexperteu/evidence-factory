@@ -30,7 +30,9 @@ from typing import Any, Literal
 
 LOG = logging.getLogger("evidence_factory.llm")
 
-Role = Literal["truth_extractor", "event_graph", "artifact_content", "critic", "closure", "noise", "cast"]
+Role = Literal[
+    "truth_extractor", "event_graph", "artifact_content", "critic", "closure", "noise", "cast"
+]
 
 # The smoking-gun bar: a single load-bearing artifact carrying this much (or
 # more) signal weight is judged strong enough to prove its bound proposition on
@@ -160,13 +162,15 @@ class LLMGateway:
         )
 
     def _fixture_cast_response(self) -> str:
-        return json.dumps({
-            "personas": [
-                {"display_name": "Alice Fixture", "role": "protagonist"},
-                {"display_name": "Bob Fixture", "role": "antagonist"},
-                {"display_name": "Carol Fixture", "role": "witness"},
-            ]
-        })
+        return json.dumps(
+            {
+                "personas": [
+                    {"display_name": "Alice Fixture", "role": "protagonist"},
+                    {"display_name": "Bob Fixture", "role": "antagonist"},
+                    {"display_name": "Carol Fixture", "role": "witness"},
+                ]
+            }
+        )
 
     def _fixture_critic_verdict(self, prompt: str) -> str:
         """Stand in for the Smoking-Gun Critic LLM with a structured verdict.
