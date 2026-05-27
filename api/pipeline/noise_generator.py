@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta
+from typing import Literal, cast
 
 from ..provenance.artifact_writer import WrittenArtifact
 from ..provenance.email_profile import EmailBrief, write_email
@@ -47,7 +48,7 @@ def _build_persona_context(registry: PersonaRegistry) -> str:
     lines: list[str] = []
     for persona in registry.personas():
         devices = registry.devices_for(persona.id)
-        device_desc = ", ".join(f"{d.id} ({d.profile})" for d in devices)
+        device_desc = ", ".join(f"{d.id} ({','.join(d.profiles)})" for d in devices)
         lines.append(f"- {persona.display_name}: devices=[{device_desc}]")
     return "\n".join(lines) if lines else "(no personas)"
 
@@ -98,12 +99,12 @@ class NoiseGenerator:
         idx = 0
 
         while len(accepted) < effective_target and attempt < max_attempts:
-            owner_id, device = triples[idx % len(triples)]
+            owner_id, device, profile = triples[idx % len(triples)]
             idx += 1
             attempt += BATCH_SIZE
 
             raw_batch = self._gateway.generate_noise_batch(
-                profile=device.profile,
+                profile=profile,
                 batch_size=BATCH_SIZE,
                 context_cache_key=_CONTEXT_CACHE_KEY,
                 persona_context=persona_context,
@@ -123,12 +124,12 @@ class NoiseGenerator:
                 if len(accepted) >= effective_target:
                     break
                 artifact = self._materialise(
-                    owner_id, device, text, item, timeline_start, timeline_end, disclaimer
+                    owner_id, device, profile, text, item, timeline_start, timeline_end, disclaimer
                 )
                 if artifact is None:
                     continue
                 accepted.append(artifact)
-                profile_dist[device.profile] = profile_dist.get(device.profile, 0) + 1
+                profile_dist[profile] = profile_dist.get(profile, 0) + 1
 
         if len(accepted) < effective_target:
             LOG.warning(
@@ -152,14 +153,16 @@ class NoiseGenerator:
     # Internals
     # ------------------------------------------------------------------
 
-    def _permitted_triples(self) -> list[tuple[str, Device]]:
-        """Every (owner_id, device) the registry permits — persona and system."""
-        triples: list[tuple[str, Device]] = []
+    def _permitted_triples(self) -> list[tuple[str, Device, str]]:
+        """Every (owner_id, device, profile) the registry permits — one entry per profile per device."""
+        triples: list[tuple[str, Device, str]] = []
         for persona in self._registry.personas():
             for device in self._registry.devices_for(persona.id):
-                triples.append((persona.id, device))
+                for profile in device.profiles:
+                    triples.append((persona.id, device, profile))
         for device in self._registry.system_devices():
-            triples.append((device.owner_id, device))
+            for profile in device.profiles:
+                triples.append((device.owner_id, device, profile))
         return triples
 
     def _timestamp(self, item: dict[str, object], start: datetime, end: datetime) -> datetime:
@@ -175,42 +178,44 @@ class NoiseGenerator:
         self,
         owner_id: str,
         device: Device,
+        profile: str,
         text: str,
         item: dict[str, object],
         start: datetime,
         end: datetime,
         disclaimer: str,
     ) -> Artifact | None:
-        if not self._registry.is_permitted(owner_id, device.id, device.profile):
+        if not self._registry.is_permitted(owner_id, device.id, profile):
             return None
         timestamp = self._timestamp(item, start, end)
         self._seq += 1
         seq = self._seq
 
         try:
-            if device.profile == "email":
+            if profile == "email":
                 written = self._write_email(owner_id, text, timestamp, seq, disclaimer)
-            elif device.profile == "pdf":
+            elif profile == "pdf":
                 written = self._write_pdf(owner_id, text, timestamp, seq, disclaimer)
-            elif device.profile == "xlsx_ledger":
+            elif profile == "xlsx_ledger":
                 written = self._write_xlsx(owner_id, text, timestamp, seq, disclaimer)
-            elif device.profile == "jpeg":
+            elif profile == "jpeg":
                 written = self._write_jpeg(device, text, timestamp, disclaimer)
-            elif device.profile == "sms":
+            elif profile == "sms":
                 written = self._write_sms(owner_id, text, timestamp, disclaimer)
-            elif device.profile == "system_log_csv":
+            elif profile == "system_log_csv":
                 written = self._write_system_log(device, timestamp, seq, disclaimer)
             else:  # pragma: no cover - registry profiles are a closed set
                 return None
         except Exception:
-            LOG.warning("noise writer failed for profile=%s; skipping", device.profile)
+            LOG.warning("noise writer failed for profile=%s; skipping", profile)
             return None
 
+        _ArtifactProfile = Literal["email", "pdf", "xlsx_ledger", "jpeg", "system_log_csv", "sms"]
         return Artifact(
             id=f"noise_{seq:06d}",
             owner_id=owner_id,
             device_id=device.id,
-            profile=device.profile,
+            profile=cast(_ArtifactProfile, profile),
             filename=written.filename,
             payload=written.payload,
             sha256=written.sha256,

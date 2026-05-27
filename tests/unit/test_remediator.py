@@ -155,7 +155,7 @@ def test_redact_relocate_emits_valid_rfc822_on_owned_device():
     relocated = redact_relocate(_artifact(), registry, disclaimer=DISCLAIMER)[0]
     device = registry.get_device(relocated.device_id)
     assert device.owner_id == relocated.owner_id
-    assert device.profile == "email"
+    assert "email" in device.profiles
     msg = BytesParser(policy=default_policy).parsebytes(relocated.payload)
     assert msg["Subject"] and msg["From"] and msg["To"]
 

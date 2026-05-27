@@ -72,12 +72,12 @@ class PersonaRegistry:
         return self._devices[device_id]
 
     def is_permitted(self, actor_id: str, device_id: str, profile: str) -> bool:
-        """True iff actor owns device and device's profile matches."""
+        """True iff actor owns device and profile is in device.profiles."""
         is_known = actor_id in self._personas or actor_id in self._system_actors
         if not is_known or device_id not in self._devices:
             return False
         device = self._devices[device_id]
-        return device.owner_id == actor_id and device.profile == profile
+        return device.owner_id == actor_id and profile in device.profiles
 
     # ------------------------------------------------------------------
     # System-actor queries
@@ -123,16 +123,21 @@ def default_registry() -> PersonaRegistry:
     """Merged cast: six personas, two system actors, all profile devices.
 
     Persona roster (index order matters for event_graph cycling):
-      0  p_holmes  — email / pdf / sms
-      1  p_watson  — email / pdf / sms
-      2  p_irene   — jpeg phone
-      3  p_mycroft — xlsx_ledger workstation
-      4  p_hudson  — email / sms / pdf   (sms at index 1 → slot 4 hits sms)
-      5  p_lestrade — email / pdf
+      0  p_holmes  — laptop(email,pdf) / workstation(pdf,email,xlsx_ledger) / phone(sms,jpeg)
+      1  p_watson  — laptop(email,pdf) / workstation(pdf,email,xlsx_ledger) / phone(sms,jpeg)
+      2  p_irene   — phone(sms,jpeg)
+      3  p_mycroft — workstation(pdf,email,xlsx_ledger)
+      4  p_hudson  — tablet(email,pdf) / phone(sms,jpeg) / workstation(pdf,email,xlsx_ledger)
+      5  p_lestrade — desktop(email,pdf) / workstation(pdf,email,xlsx_ledger)
 
-    With owners_per_proposition=5 the cycling produces one artifact per
-    slot: email(0), pdf(1), jpeg(2), xlsx_ledger(3), sms(4).
-    System actors add system_log_csv, covering all six profiles.
+    Device profiles follow real-world conventions:
+      laptops/tablets/desktops → ("email", "pdf")
+      workstations             → ("pdf", "email", "xlsx_ledger")
+      phones                   → ("sms", "jpeg")
+      system devices           → ("system_log_csv",)
+
+    Each device's profiles[0] is its primary dispatch profile, preserving the
+    same per-slot artifact types the event_graph cycling produced before.
     """
     personas = [
         Persona(
@@ -179,85 +184,111 @@ def default_registry() -> PersonaRegistry:
         ),
     ]
     devices = [
-        # Holmes — email + pdf + sms
-        Device(id="d_holmes_mail", owner_id="p_holmes", label="holmes-laptop", profile="email"),
+        # Holmes — laptop(email,pdf) / workstation(pdf,email,xlsx_ledger) / phone(sms,jpeg)
+        Device(
+            id="d_holmes_mail",
+            owner_id="p_holmes",
+            label="holmes-laptop",
+            profiles=("email", "pdf"),
+        ),
         Device(
             id="d_holmes_workstation",
             owner_id="p_holmes",
             label="holmes-workstation",
-            profile="pdf",
+            profiles=("pdf", "email", "xlsx_ledger"),
         ),
         Device(
             id="d_holmes_phone",
             owner_id="p_holmes",
             label="holmes-phone",
-            profile="sms",
+            profiles=("sms", "jpeg"),
+            make="Samsung",
+            model="Galaxy S24",
         ),
-        # Watson — email + pdf + sms
-        Device(id="d_watson_mail", owner_id="p_watson", label="watson-laptop", profile="email"),
+        # Watson — laptop(email,pdf) / workstation(pdf,email,xlsx_ledger) / phone(sms,jpeg)
+        Device(
+            id="d_watson_mail",
+            owner_id="p_watson",
+            label="watson-laptop",
+            profiles=("email", "pdf"),
+        ),
         Device(
             id="d_watson_workstation",
             owner_id="p_watson",
             label="watson-workstation",
-            profile="pdf",
+            profiles=("pdf", "email", "xlsx_ledger"),
         ),
         Device(
             id="d_watson_phone",
             owner_id="p_watson",
             label="watson-phone",
-            profile="sms",
+            profiles=("sms", "jpeg"),
+            make="Google",
+            model="Pixel 8",
         ),
-        # Irene — jpeg phone
+        # Irene — phone(sms,jpeg)
         Device(
             id="d_irene_phone",
             owner_id="p_irene",
             label="irene-phone",
-            profile="jpeg",
+            profiles=("sms", "jpeg"),
             make="Apple",
             model="iPhone 15 Pro",
             gps_capable=True,
         ),
-        # Mycroft — xlsx_ledger workstation (slot 3 in owners_per_proposition=5 cycling)
+        # Mycroft — workstation(pdf,email,xlsx_ledger)  (slot 3 in owners_per_proposition=5 cycling)
         Device(
             id="d_mycroft_workstation",
             owner_id="p_mycroft",
             label="mycroft-workstation",
-            profile="xlsx_ledger",
+            profiles=("pdf", "email", "xlsx_ledger"),
         ),
-        # Hudson — email + sms + pdf  (sms at index 1 so devices[4%3=1]=sms in slot 4)
-        Device(id="d_hudson_mail", owner_id="p_hudson", label="hudson-tablet", profile="email"),
-        Device(id="d_hudson_phone", owner_id="p_hudson", label="hudson-phone", profile="sms"),
+        # Hudson — tablet(email,pdf) / phone(sms,jpeg) / workstation(pdf,email,xlsx_ledger)
+        Device(
+            id="d_hudson_mail",
+            owner_id="p_hudson",
+            label="hudson-tablet",
+            profiles=("email", "pdf"),
+        ),
+        Device(
+            id="d_hudson_phone",
+            owner_id="p_hudson",
+            label="hudson-phone",
+            profiles=("sms", "jpeg"),
+            make="Apple",
+            model="iPhone 14",
+        ),
         Device(
             id="d_hudson_workstation",
             owner_id="p_hudson",
             label="hudson-workstation",
-            profile="pdf",
+            profiles=("pdf", "email", "xlsx_ledger"),
         ),
-        # Lestrade — email + pdf
+        # Lestrade — desktop(email,pdf) / workstation(pdf,email,xlsx_ledger)
         Device(
             id="d_lestrade_mail",
             owner_id="p_lestrade",
             label="lestrade-desktop",
-            profile="email",
+            profiles=("email", "pdf"),
         ),
         Device(
             id="d_lestrade_workstation",
             owner_id="p_lestrade",
             label="lestrade-workstation",
-            profile="pdf",
+            profiles=("pdf", "email", "xlsx_ledger"),
         ),
-        # System devices
+        # System devices — single profile, unchanged
         Device(
             id="d_bldg_ctrl",
             owner_id="sys_bldg_access",
             label="building-controller",
-            profile="system_log_csv",
+            profiles=("system_log_csv",),
         ),
         Device(
             id="d_pbx",
             owner_id="sys_pbx",
             label="phone-exchange",
-            profile="system_log_csv",
+            profiles=("system_log_csv",),
         ),
     ]
     return PersonaRegistry(personas, devices, system_actors=system_actors)

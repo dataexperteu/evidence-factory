@@ -146,12 +146,12 @@ def test_requires_timezone_aware_created_at():
 # ---------------------------------------------------------------------------
 
 
-def test_registry_rejects_pdf_on_email_device():
-    """The registry must return False when an email device is used for PDF."""
+def test_registry_rejects_pdf_on_phone_device():
+    """A phone device (sms/jpeg only) must not permit PDF emission."""
     reg = default_registry()
     holmes = reg.get_persona("p_holmes")
-    email_dev = reg.get_device("d_holmes_mail")
-    assert not reg.is_permitted(holmes.id, email_dev.id, "pdf")
+    phone_dev = reg.get_device("d_holmes_phone")
+    assert not reg.is_permitted(holmes.id, phone_dev.id, "pdf")
 
 
 def test_registry_permits_pdf_on_pdf_device():
@@ -167,8 +167,8 @@ def test_emitter_raises_when_pdf_device_not_owned_by_persona():
     holmes = Persona(id="p_h", display_name="Holmes", email_address="h@b.example")
     watson = Persona(id="p_w", display_name="Watson", email_address="w@b.example")
     # watson_pdf_dev is owned by watson, not holmes
-    watson_pdf_dev = Device(id="d_w_pdf", owner_id="p_w", label="watson-ws", profile="pdf")
-    holmes_email_dev = Device(id="d_h_mail", owner_id="p_h", label="holmes-laptop", profile="email")
+    watson_pdf_dev = Device(id="d_w_pdf", owner_id="p_w", label="watson-ws", profiles=("pdf",))
+    holmes_email_dev = Device(id="d_h_mail", owner_id="p_h", label="holmes-laptop", profiles=("email",))
     reg = PersonaRegistry([holmes, watson], [holmes_email_dev, watson_pdf_dev])
 
     # Craft an event that assigns watson's pdf device to holmes (cross-actor)

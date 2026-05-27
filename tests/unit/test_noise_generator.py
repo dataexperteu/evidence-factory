@@ -85,9 +85,11 @@ def test_noise_carries_no_bound_propositions() -> None:
 
 
 def test_all_profiles_represented() -> None:
-    # Enough artifacts to cycle through all registry devices (incl. the two
-    # system-log devices, which sit at the end of the triple cycle).
-    artifacts, summary = _generate(_generator(), target_count=200)
+    # Multi-profile devices expand the triple list to 33 entries (31 persona
+    # device-profile combos + 2 system devices). With BATCH_SIZE=10 each
+    # iteration, we need >33 iterations = >330 artifacts to cycle through all
+    # triples including the two system_log_csv devices at the end of the list.
+    artifacts, summary = _generate(_generator(), target_count=400)
     used = {a.profile for a in artifacts}
     expected = {"email", "pdf", "sms", "jpeg", "xlsx_ledger", "system_log_csv"}
     assert used == expected, f"missing profiles: {expected - used}"
