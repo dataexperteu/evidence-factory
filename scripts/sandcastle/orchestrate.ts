@@ -197,6 +197,13 @@ const SLICES: Slice[] = [
   // Operator-experience fixes filed 2026-05-22.
   { issue: 44, key: "slice-19-spa-missing-dist",     dependsOn: [3],              lane: "apron" },
   { issue: 45, key: "slice-20-run-state-persistence", dependsOn: [3],             lane: "apron" },
+  // Dynamic persona extraction + device profile diversification filed 2026-05-27.
+  // #81 must land first: it changes Device.profile → Device.profiles, which all
+  // subsequent slices depend on for correct Device construction.
+  { issue: 81, key: "slice-21-device-profiles",       dependsOn: [3],              lane: "apron" },
+  { issue: 79, key: "slice-22-cast-extractor",        dependsOn: [81],             lane: "apron" },
+  { issue: 80, key: "slice-23-cast-stage-wire",       dependsOn: [79],             lane: "apron" },
+  { issue: 82, key: "slice-24-profile-cycling",       dependsOn: [81],             lane: "apron" },
 ];
 
 const ready = (s: Slice, merged: Set<number>) =>
