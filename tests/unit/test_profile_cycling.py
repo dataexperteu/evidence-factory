@@ -237,6 +237,7 @@ def test_noise_uses_profiles_from_device_profiles():
         LLMGateway(mode="fixture", rng_seed=5),
         default_registry(),
         LeakContradictGuard(LLMGateway(mode="fixture", rng_seed=5)),
+        rng_seed=5,
     )
     artifacts, _ = gen.generate(
         propositions=["test proposition"],
@@ -261,6 +262,7 @@ def test_noise_all_profiles_appear_across_large_corpus():
         LLMGateway(mode="fixture", rng_seed=11),
         default_registry(),
         LeakContradictGuard(LLMGateway(mode="fixture", rng_seed=11)),
+        rng_seed=11,
     )
     artifacts, summary = gen.generate(
         propositions=["test proposition"],

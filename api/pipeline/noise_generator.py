@@ -60,11 +60,13 @@ class NoiseGenerator:
         gateway: LLMGateway,
         registry: PersonaRegistry,
         guard: LeakContradictGuard,
+        rng_seed: int | None = None,
     ) -> None:
         self._gateway = gateway
         self._registry = registry
         self._guard = guard
         self._seq = 0
+        self._rng = random.Random(rng_seed)
 
     def generate(
         self,
@@ -101,7 +103,7 @@ class NoiseGenerator:
 
         while len(accepted) < effective_target and attempt < max_attempts:
             owner_id, device = triples[idx % len(triples)]
-            profile = random.choice(device.profiles)
+            profile = self._rng.choice(device.profiles)
             idx += 1
             attempt += BATCH_SIZE
 
