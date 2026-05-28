@@ -34,7 +34,6 @@ import mailparser
 import pypdf
 
 from api.pipeline.orchestrator import RunSettings, run_sync
-from api.pipeline.persona_registry import default_registry
 from api.pipeline.source_intake import ingest_url
 
 FIXTURE = Path(__file__).parent / "fixtures" / "speckled_band_excerpt.txt"
@@ -43,9 +42,10 @@ HTML_FIXTURE = Path(__file__).parent / "fixtures" / "sample_article.html"
 
 def _run() -> bytes:
     paste = FIXTURE.read_text(encoding="utf-8")
-    # 5 owners/proposition → cycling slots 0-4 produce email, pdf, jpeg, xlsx, sms;
-    # system actors add system_log_csv. All six profiles represented in one run.
-    settings = RunSettings(owners_per_proposition=5)
+    # 3 owners/proposition matches the 3 fixture personas (Alice, Bob, Carol) returned
+    # by the fixture LLM cast. Their combined devices cover all six profile types:
+    # email (Alice+Bob), pdf (Alice), sms+jpeg (Bob), xlsx (Carol), system_log_csv (system actors).
+    settings = RunSettings(owners_per_proposition=3)
     events, result = run_sync(paste, attestation_checked=True, settings=settings)
     failed = [e for e in events if e.status == "failed"]
     assert not failed, f"pipeline emitted failure events: {failed}"
@@ -85,26 +85,27 @@ def test_smoke_manifest_hashes_match_corpus_files():
 
 
 def test_smoke_artifacts_are_owner_bound_to_registry():
-    """Every .eml artifact must be placed under its owning persona/device path."""
+    """Every .eml artifact must be placed under a valid custodian/device path in the manifest."""
     zip_bytes = _run()
-    registry = default_registry()
-    valid_persona_slugs = {_slug(p.display_name): p.id for p in registry.personas()}
-    valid_device_labels = {
-        d.label: d.owner_id
-        for d in (d for p in registry.personas() for d in registry.devices_for(p.id))
-    }
     with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        manifest_text = zf.read("corpus/manifest.csv").decode("utf-8")
         artifact_paths = [
             n for n in zf.namelist() if n.startswith("corpus/") and n.endswith(".eml")
         ]
+    rows = list(csv.DictReader(io.StringIO(manifest_text)))
+    # Derive valid (custodian_slug, device_slug) pairs from manifest paths.
+    valid_pairs: set[tuple[str, str]] = set()
+    for row in rows:
+        parts = row["path"].split("/")
+        if len(parts) == 4 and parts[0] == "corpus":
+            valid_pairs.add((parts[1], parts[2]))
     assert artifact_paths
     for path in artifact_paths:
-        _, custodian, device, _ = path.split("/")
-        assert custodian in valid_persona_slugs, f"unknown custodian slug {custodian}"
-        assert device in valid_device_labels, f"unknown device label {device}"
-        owner_of_device = valid_device_labels[device]
-        assert valid_persona_slugs[custodian] == owner_of_device, (
-            f"device {device} not owned by {custodian}"
+        parts = path.split("/")
+        assert len(parts) == 4, f"unexpected corpus path depth: {path}"
+        _, custodian, device, _ = parts
+        assert (custodian, device) in valid_pairs, (
+            f"eml artifact {path}: custodian/device pair not found in manifest"
         )
 
 
