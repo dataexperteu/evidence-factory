@@ -17,6 +17,7 @@ context is sent under one prompt-cache key so cache hits are logged.
 from __future__ import annotations
 
 import logging
+import random
 from datetime import datetime, timedelta
 from typing import Literal, cast
 
@@ -59,11 +60,13 @@ class NoiseGenerator:
         gateway: LLMGateway,
         registry: PersonaRegistry,
         guard: LeakContradictGuard,
+        rng_seed: int | None = None,
     ) -> None:
         self._gateway = gateway
         self._registry = registry
         self._guard = guard
         self._seq = 0
+        self._rng = random.Random(rng_seed)
 
     def generate(
         self,
@@ -99,7 +102,8 @@ class NoiseGenerator:
         idx = 0
 
         while len(accepted) < effective_target and attempt < max_attempts:
-            owner_id, device, profile = triples[idx % len(triples)]
+            owner_id, device = triples[idx % len(triples)]
+            profile = self._rng.choice(device.profiles)
             idx += 1
             attempt += BATCH_SIZE
 
@@ -153,16 +157,14 @@ class NoiseGenerator:
     # Internals
     # ------------------------------------------------------------------
 
-    def _permitted_triples(self) -> list[tuple[str, Device, str]]:
-        """Every (owner_id, device, profile) the registry permits — one entry per profile per device."""
-        triples: list[tuple[str, Device, str]] = []
+    def _permitted_triples(self) -> list[tuple[str, Device]]:
+        """Every (owner_id, device) pair the registry permits; profile is chosen randomly per batch."""
+        triples: list[tuple[str, Device]] = []
         for persona in self._registry.personas():
             for device in self._registry.devices_for(persona.id):
-                for profile in device.profiles:
-                    triples.append((persona.id, device, profile))
+                triples.append((persona.id, device))
         for device in self._registry.system_devices():
-            for profile in device.profiles:
-                triples.append((device.owner_id, device, profile))
+            triples.append((device.owner_id, device))
         return triples
 
     def _timestamp(self, item: dict[str, object], start: datetime, end: datetime) -> datetime:

@@ -11,9 +11,14 @@ import hashlib
 import io
 import re
 import secrets
+import zipfile
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import Any
+
+# openpyxl always writes dcterms:modified as datetime.now() during save(),
+# so we replace the modified timestamp in core.xml with a deterministic one.
+_MODIFIED_RE = re.compile(rb"(<dcterms:modified[^>]*>)[^<]*(</dcterms:modified>)")
 
 
 @dataclass(frozen=True)
@@ -102,12 +107,39 @@ def write_xlsx_ledger(brief: XlsxLedgerBrief, *, disclaimer: str) -> WrittenXlsx
     return WrittenXlsxLedger(filename=filename, payload=payload, sha256=sha)
 
 
+_ZIP_EPOCH = (1980, 1, 1, 0, 0, 0)  # minimum valid zip timestamp
+
+
 def _deterministic_bytes(wb: Any) -> bytes:
-    """Save workbook to bytes.  openpyxl is deterministic given identical
-    workbook state, so calling this twice with the same wb produces the same
-    bytes — SHA-256 stability is guaranteed by the caller setting all
-    timestamps from metadata rather than letting openpyxl use wall-clock time.
+    """Save workbook to bytes with all wall-clock timestamps replaced.
+
+    openpyxl (a) embeds the current wall-clock second in every zip entry's
+    local-file header and (b) overwrites dcterms:modified in core.xml with
+    datetime.now() on every save().  We strip both sources of non-determinism
+    so SHA-256 is stable for identical workbook state.
     """
-    buf = io.BytesIO()
-    wb.save(buf)
-    return buf.getvalue()
+    # Capture the intended modified time before save() overwrites it.
+    intended_modified: datetime | None = getattr(wb.properties, "modified", None)
+
+    raw = io.BytesIO()
+    wb.save(raw)
+
+    # Re-encode the intended modified timestamp as an ISO-8601 UTC string.
+    if intended_modified is not None:
+        if intended_modified.tzinfo is None:
+            fixed_ts = intended_modified.strftime("%Y-%m-%dT%H:%M:%SZ").encode()
+        else:
+            fixed_ts = intended_modified.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%SZ").encode()
+    else:
+        fixed_ts = b"1970-01-01T00:00:00Z"
+
+    out = io.BytesIO()
+    with zipfile.ZipFile(raw, "r") as zin, zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as zout:
+        for entry in sorted(zin.infolist(), key=lambda e: e.filename):
+            data = zin.read(entry.filename)
+            if entry.filename == "docProps/core.xml":
+                data = _MODIFIED_RE.sub(rb"\g<1>" + fixed_ts + rb"\g<2>", data)
+            info = zipfile.ZipInfo(entry.filename, date_time=_ZIP_EPOCH)
+            info.compress_type = entry.compress_type
+            zout.writestr(info, data)
+    return out.getvalue()
