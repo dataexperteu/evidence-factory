@@ -4,7 +4,8 @@ Wires the stages and produces a stream of progress events the FastAPI SSE
 endpoint can publish. Implemented as an async generator so the orchestrator
 itself does not depend on FastAPI.
 
-Stages emitted: intake, extract, events, emit, critique, close, package, done.
+Stages emitted: intake, extract, cast, events, emit, critique, redherring,
+close, noise, package, done.
 On failure (e.g. closure failure) a `failed` event with a structured payload
 is emitted instead of `done`.
 """
@@ -22,6 +23,7 @@ from typing import Literal
 
 from .artifact_emitter import emit_artifacts
 from .attestation import gate
+from .cast_extractor import extract_cast
 from .closure_verifier import verify_closure
 from .critic import SmokingGunCritic
 from .event_graph import build_events
@@ -29,7 +31,6 @@ from .llm_gateway import LLMGateway
 from .noise_generator import NoiseGenerator
 from .noise_guard import LeakContradictGuard
 from .packager import PackagerInput, assert_separation, build_zip
-from .persona_registry import default_registry
 from .red_herring_designer import DesignerSettings, design_red_herrings
 from .remediation import run_critique_pass, top_up_closure
 from .remediator import RandomStrategySelector
@@ -153,13 +154,22 @@ async def run_pipeline(
         None,
     )
 
+    yield ProgressEvent("cast", "started"), None
+    registry = extract_cast(source, gateway=gateway)
+    persona_count = len(registry.personas())
+    yield ProgressEvent("cast", "complete", {"personas": persona_count}), None
+
+    # Clamp settings to the actual cast size: a small source may yield fewer
+    # personas than the preset expects, but the pipeline should still complete.
+    effective_owners = min(settings.owners_per_proposition, persona_count)
+    effective_min_distinct = min(settings.min_owner_distinct, effective_owners)
+
     yield ProgressEvent("events", "started"), None
-    registry = default_registry()
     events = build_events(
         truth,
         registry,
         gateway=gateway,
-        owners_per_proposition=settings.owners_per_proposition,
+        owners_per_proposition=effective_owners,
     )
     yield ProgressEvent("events", "complete", {"events": len(events)}), None
 
@@ -223,7 +233,7 @@ async def run_pipeline(
     closure = verify_closure(
         truth.graph,
         ledger,
-        settings.min_owner_distinct,
+        effective_min_distinct,
         red_herrings=red_herrings,
         dominance_margin=settings.dominance_margin,
     )
@@ -235,7 +245,7 @@ async def run_pipeline(
             truth.graph,
             ledger,
             registry,
-            settings.min_owner_distinct,
+            effective_min_distinct,
             disclaimer=disclaimer,
             base_time=_TOPUP_BASE_TIME,
         )
@@ -243,7 +253,7 @@ async def run_pipeline(
         closure = verify_closure(
             truth.graph,
             ledger,
-            settings.min_owner_distinct,
+            effective_min_distinct,
             red_herrings=red_herrings,
             breaker_margin=settings.red_herring_breaker_margin,
             dominance_margin=settings.dominance_margin,
