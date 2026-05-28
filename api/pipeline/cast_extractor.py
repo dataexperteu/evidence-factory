@@ -36,13 +36,13 @@ _SYSTEM_DEVICES: list[Device] = [
         id="d_bldg_ctrl",
         owner_id="sys_bldg_access",
         label="building-controller",
-        profile="system_log_csv",
+        profiles=("system_log_csv",),
     ),
     Device(
         id="d_pbx",
         owner_id="sys_pbx",
         label="phone-exchange",
-        profile="system_log_csv",
+        profiles=("system_log_csv",),
     ),
 ]
 
@@ -96,12 +96,12 @@ def _assign_devices(personas: list[Persona], rng: random.Random) -> list[Device]
                     id=f"d_{slug}_{profile}",
                     owner_id=persona.id,
                     label=f"{slug}-{profile}",
-                    profile=profile,
+                    profiles=(profile,),
                 )
             )
 
     # Guarantee ≥2 personas own an email device.
-    email_owners = {d.owner_id for d in devices if d.profile == "email"}
+    email_owners = {d.owner_id for d in devices if "email" in d.profiles}
     for persona in personas:
         if len(email_owners) >= 2:
             break
@@ -115,7 +115,7 @@ def _assign_devices(personas: list[Persona], rng: random.Random) -> list[Device]
                     id=device_id,
                     owner_id=persona.id,
                     label=f"{slug}-email",
-                    profile="email",
+                    profiles=("email",),
                 )
             )
             email_owners.add(persona.id)

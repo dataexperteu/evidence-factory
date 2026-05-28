@@ -54,7 +54,7 @@ def test_fixture_mode_email_persona_guarantee():
     gw = LLMGateway(mode="fixture")
     reg = extract_cast(_source(), gateway=gw)
     email_owners = {
-        d.owner_id for p in reg.personas() for d in reg.devices_for(p.id) if d.profile == "email"
+        d.owner_id for p in reg.personas() for d in reg.devices_for(p.id) if "email" in d.profiles
     }
     assert len(email_owners) >= 2, f"expected ≥2 email-device owners, got {email_owners}"
 
@@ -81,7 +81,7 @@ def test_fallback_registry_satisfies_email_guarantee():
     gw = _gateway_returning("NOT JSON")
     reg = extract_cast(_source(), gateway=gw)
     email_owners = {
-        d.owner_id for p in reg.personas() for d in reg.devices_for(p.id) if d.profile == "email"
+        d.owner_id for p in reg.personas() for d in reg.devices_for(p.id) if "email" in d.profiles
     }
     assert len(email_owners) >= 2
 
@@ -111,7 +111,7 @@ def test_email_guarantee_with_one_llm_persona():
     gw = _gateway_returning(payload)
     reg = extract_cast(_source(), gateway=gw)
     email_owners = {
-        d.owner_id for p in reg.personas() for d in reg.devices_for(p.id) if d.profile == "email"
+        d.owner_id for p in reg.personas() for d in reg.devices_for(p.id) if "email" in d.profiles
     }
     assert len(email_owners) >= 2
 
@@ -130,7 +130,7 @@ def test_email_guarantee_with_multiple_llm_personas():
     gw = _gateway_returning(payload)
     reg = extract_cast(_source(), gateway=gw)
     email_owners = {
-        d.owner_id for p in reg.personas() for d in reg.devices_for(p.id) if d.profile == "email"
+        d.owner_id for p in reg.personas() for d in reg.devices_for(p.id) if "email" in d.profiles
     }
     assert len(email_owners) >= 2
 
@@ -162,7 +162,7 @@ def test_system_devices_owned_by_system_actors():
     assert len(sys_devs) == 2
     for dev in sys_devs:
         assert reg.is_system_actor(dev.owner_id)
-        assert dev.profile == "system_log_csv"
+        assert "system_log_csv" in dev.profiles
 
 
 # ---------------------------------------------------------------------------
